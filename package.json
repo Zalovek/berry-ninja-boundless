@@ -1,0 +1,17 @@
+{
+  "name": "berry-ninja-boundless",
+  "version": "0.1.0",
+  "description": "A Fruit Ninja inspired game set in the Boundless ecosystem. Slash berries, avoid errors, and explore the world of verifiable compute!",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.70.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+} 
