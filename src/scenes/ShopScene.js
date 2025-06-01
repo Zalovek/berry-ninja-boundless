@@ -22,7 +22,7 @@ export class ShopScene extends Phaser.Scene {
         }).setInteractive();
 
         backButton.on('pointerdown', () => {
-            this.scene.start('GameScene');
+            this.scene.start('MenuScene');
         });
 
         // Отображение скинов
@@ -65,8 +65,16 @@ export class ShopScene extends Phaser.Scene {
                     saveManager.setSelectedSkin(skin.id);
                     this.scene.restart();
                 } else {
-                    // TODO: Добавить логику покупки
-                    console.log(`Попытка купить скин ${skin.name} за ${skin.price} очков`);
+                    // Покупка скина
+                    if (this.saveData.highScore >= skin.price) {
+                        saveManager.unlockSkin(skin.id);
+                        saveManager.setSelectedSkin(skin.id);
+                        this.scene.restart();
+                    } else {
+                        // Недостаточно очков
+                        button.setText('Недостаточно очков');
+                        button.setBackgroundColor('#ff0000');
+                    }
                 }
             });
 
