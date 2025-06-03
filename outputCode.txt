@@ -1,6 +1,85 @@
+=== C:\Users\Vlad\Desktop\berry-ninja-boundless\package.json ===
+{
+  "name": "berry-ninja-boundless",
+  "version": "0.1.0",
+  "description": "A Fruit Ninja inspired game set in the Boundless ecosystem. Slash berries, avoid errors, and explore the world of verifiable compute!",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.70.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+} 
+
+=== C:\Users\Vlad\Desktop\berry-ninja-boundless\src\main.js ===
+import Phaser from 'phaser';
+import { GameScene } from './scenes/GameScene';
+import { ShopScene } from './scenes/ShopScene';
+import { MenuScene } from './scenes/MenuScene';
+
+const config = {
+    type: Phaser.AUTO,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    parent: 'game-container',
+    backgroundColor: '#000000',
+    scene: [MenuScene, GameScene, ShopScene],
+    physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: { y: 300 },
+            debug: false
+        }
+    }
+};
+
+const game = new Phaser.Game(config);
+
+window.addEventListener('resize', () => {
+    game.scale.resize(window.innerWidth, window.innerHeight);
+}); 
+
+=== C:\Users\Vlad\Desktop\berry-ninja-boundless\src\data\skins.js ===
+export const skins = {
+    default: {
+        id: 'default',
+        name: 'Классическая ягода',
+        price: 0,
+        unlocked: true,
+        assets: ['cranberry', 'blueberry', 'renderBerry', 'strawberry']
+    },
+    reka: {
+        id: 'reka',
+        name: 'Reka Ягода',
+        price: 100,
+        unlocked: false,
+        assets: ['reka']
+    },
+    littleBrother: {
+        id: 'littleBrother',
+        name: 'Little Brother',
+        price: 250,
+        unlocked: false,
+        assets: ['littleBrother']
+    },
+    kashvi: {
+        id: 'kashvi',
+        name: 'Kashvi',
+        price: 500,
+        unlocked: false,
+        assets: ['kashvi']
+    }
+}; 
+
+=== C:\Users\Vlad\Desktop\berry-ninja-boundless\src\scenes\GameScene.js ===
 import Phaser from 'phaser';
 import { skins } from '../data/skins';
-import createStyledButton from '../utils/ButtonStyle';
 
 export class GameScene extends Phaser.Scene {
     constructor() {
@@ -143,7 +222,7 @@ export class GameScene extends Phaser.Scene {
 
     handlePointerMove(pointer) {
         this.trailPoints.push({ x: pointer.x, y: pointer.y });
-        if (this.trailPoints.length > 10    ) {
+        if (this.trailPoints.length > 10) {
             this.trailPoints.shift();
         }
         // Проверяем пересечение линии с ягодами
@@ -291,84 +370,226 @@ export class GameScene extends Phaser.Scene {
     }
 
     gameOver() {
-        // Останавливаем все таймеры и обработчики
-        this.time.removeAllEvents();
-        this.input.off('pointermove', this.handlePointerMove, this);
-
-        // Создаем затемнение
-        const overlay = this.add.rectangle(0, 0, this.sys.game.config.width, this.sys.game.config.height, 0x000000, 0.7);
-        overlay.setOrigin(0, 0);
-
-        // Текст Game Over
-        this.add.text(400, 200, 'Игра окончена', {
-            fontSize: '48px',
+        this.scene.pause();
+        const gameOverText = this.add.text(this.sys.game.config.width / 2, this.sys.game.config.height / 2 - 50, 'Игра окончена!', {
+            fontSize: '64px',
             fill: '#fff'
         }).setOrigin(0.5);
 
-        // Показываем финальный счет
-        this.add.text(400, 280, `Счет: ${this.score}`, {
+        const restartButton = this.add.text(this.sys.game.config.width / 2, this.sys.game.config.height / 2 + 30, 'Начать заново', {
+            fontSize: '32px',
+            fill: '#fff',
+            backgroundColor: 'rgba(0,0,0,0.1)'
+        }).setOrigin(0.5).setInteractive();
+
+        restartButton.on('pointerdown', () => {
+            this.scene.resume();
+            this.scene.restart();
+        });
+
+        const menuButton = this.add.text(this.sys.game.config.width / 2, this.sys.game.config.height / 2 + 90, 'В меню', {
+            fontSize: '28px',
+            fill: '#00ff99',
+            backgroundColor: 'rgba(0,0,0,0.1)',
+            padding: { x: 20, y: 8 }
+        }).setOrigin(0.5).setInteractive();
+        menuButton.on('pointerdown', () => {
+            this.scene.stop();
+            this.scene.start('MenuScene');
+        });
+    }
+} 
+
+=== C:\Users\Vlad\Desktop\berry-ninja-boundless\src\scenes\MenuScene.js ===
+import Phaser from 'phaser';
+
+export class MenuScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'MenuScene' });
+    }
+
+    create() {
+        const { width, height } = this.sys.game.config;
+        const fontFamily = `'SF Pro Display', 'Roboto', 'Arial', sans-serif`;
+        this.add.text(width / 2, height / 2 - 100, 'Berry Ninja', {
+            fontSize: '64px',
+            fill: '#222',
+            fontFamily,
+            fontStyle: 'bold',
+            shadow: { offsetX: 0, offsetY: 2, color: '#fff', blur: 8, fill: true }
+        }).setOrigin(0.5);
+
+        // Стили для кнопок
+        const buttonStyle = {
+            fontSize: '36px',
+            fill: '#222',
+            fontFamily,
+            backgroundColor: 'rgba(255,255,255,0.8)',
+            padding: { x: 48, y: 18 },
+            fontStyle: 'bold',
+            stroke: '#fff',
+            strokeThickness: 2,
+            shadow: { offsetX: 0, offsetY: 2, color: '#fff', blur: 6, fill: true }
+        };
+
+        const playButton = this.add.text(width / 2, height / 2, 'Играть', buttonStyle)
+            .setOrigin(0.5)
+            .setInteractive();
+        playButton.setStyle({
+            borderRadius: '999px',
+            borderColor: 'rgba(255,255,255,0.7)',
+            borderWidth: 2,
+            backgroundColor: 'rgba(255,255,255,0.8)',
+        });
+
+        playButton.on('pointerdown', () => {
+            this.scene.start('GameScene');
+        });
+
+        const shopButton = this.add.text(width / 2, height / 2 + 80, 'Магазин', buttonStyle)
+            .setOrigin(0.5)
+            .setInteractive();
+        shopButton.setStyle({
+            borderRadius: '999px',
+            borderColor: 'rgba(255,255,255,0.7)',
+            borderWidth: 2,
+            backgroundColor: 'rgba(255,255,255,0.8)',
+        });
+
+        shopButton.on('pointerdown', () => {
+            this.scene.start('ShopScene');
+        });
+    }
+} 
+
+=== C:\Users\Vlad\Desktop\berry-ninja-boundless\src\scenes\ShopScene.js ===
+import Phaser from 'phaser';
+import { skins } from '../data/skins';
+import { saveManager } from '../utils/saveManager';
+
+export class ShopScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'ShopScene' });
+        this.saveData = saveManager.load();
+    }
+
+    create() {
+        // Заголовок
+        this.add.text(400, 50, 'Магазин скинов', {
             fontSize: '32px',
             fill: '#fff'
         }).setOrigin(0.5);
 
-        // Кнопка "Начать заново" с новым дизайном
-        const { container: restartButtonContainer } = createStyledButton(
-            this, 
-            400, 
-            360, 
-            'Играть снова', 
-            () => {
-                // Явно перезапускаем сцену
-                this.scene.stop('GameScene');
-                this.scene.start('GameScene');
-            },
-            {
-                width: 250,
-                height: 60,
-                fontSize: '24px',
-                fillColor: 0xFFFFFF,
-                fillAlpha: 0.5,
-                cornerRadius: 36,
-                textColor: '#565656',
-                fontStyle: 'italic bold'
-            }
-        );
-        
-        // Добавляем ягоду к кнопке рестарта
-        const blueberry = this.add.image(
-            400 - 125, // Позиция слева от текста
-            360 - 15,  // Немного выше центра кнопки
-            'blueberry'
-        ).setScale(0.65);
+        // Кнопка возврата
+        const backButton = this.add.text(50, 50, '← Назад', {
+            fontSize: '24px',
+            fill: '#fff'
+        }).setInteractive();
 
-        // Кнопка "В меню" с новым дизайном
-        const { container: menuButtonContainer } = createStyledButton(
-            this, 
-            400, 
-            440, 
-            'В меню', 
-            () => {
-                // Явно останавливаем текущую сцену и запускаем меню
-                this.scene.stop('GameScene');
-                this.scene.start('MenuScene');
-            },
-            {
-                width: 250,
-                height: 60,
-                fontSize: '24px',
-                fillColor: 0xFFFFFF,
-                fillAlpha: 0.5,
-                cornerRadius: 36,
-                textColor: '#565656',
-                fontStyle: 'italic bold'
-            }
-        );
-        
-        // Добавляем ягоду к кнопке меню
-        const redberry = this.add.image(
-            400 - 125, // Позиция слева от текста
-            440 - 15,  // Немного выше центра кнопки
-            'strawberry'
-        ).setScale(0.8);
+        backButton.on('pointerdown', () => {
+            this.scene.start('MenuScene');
+        });
+
+        // Отображение скинов
+        let y = 150;
+        Object.values(skins).forEach((skin, index) => {
+            const skinContainer = this.add.container(400, y);
+            
+            // Фон для скина
+            const background = this.add.rectangle(0, 0, 300, 80, 0x333333);
+            skinContainer.add(background);
+
+            // Название скина
+            const nameText = this.add.text(-140, -15, skin.name, {
+                fontSize: '20px',
+                fill: '#fff'
+            });
+            skinContainer.add(nameText);
+
+            // Цена
+            const priceText = this.add.text(-140, 15, `${skin.price} очков`, {
+                fontSize: '16px',
+                fill: this.saveData.unlockedSkins.includes(skin.id) ? '#00ff00' : '#ff0000'
+            });
+            skinContainer.add(priceText);
+
+            // Кнопка покупки/выбора
+            const isUnlocked = this.saveData.unlockedSkins.includes(skin.id);
+            const isSelected = this.saveData.selectedSkin === skin.id;
+            const buttonText = isSelected ? 'Выбрано' : (isUnlocked ? 'Выбрать' : 'Купить');
+            
+            const button = this.add.text(100, 0, buttonText, {
+                fontSize: '20px',
+                fill: '#fff',
+                backgroundColor: isSelected ? '#00ff00' : (isUnlocked ? '#0000ff' : '#ff0000'),
+                padding: { x: 10, y: 5 }
+            }).setInteractive();
+
+            button.on('pointerdown', () => {
+                if (isUnlocked) {
+                    saveManager.setSelectedSkin(skin.id);
+                    this.scene.restart();
+                } else {
+                    // Покупка скина
+                    if (this.saveData.highScore >= skin.price) {
+                        saveManager.unlockSkin(skin.id);
+                        saveManager.setSelectedSkin(skin.id);
+                        this.scene.restart();
+                    } else {
+                        // Недостаточно очков
+                        button.setText('Недостаточно очков');
+                        button.setBackgroundColor('#ff0000');
+                    }
+                }
+            });
+
+            skinContainer.add(button);
+            y += 100;
+        });
     }
 } 
+
+=== C:\Users\Vlad\Desktop\berry-ninja-boundless\src\utils\saveManager.js ===
+const SAVE_KEY = 'berry-ninja-save';
+
+export const saveManager = {
+    save(data) {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    },
+
+    load() {
+        const saved = localStorage.getItem(SAVE_KEY);
+        if (saved) {
+            return JSON.parse(saved);
+        }
+        return {
+            selectedSkin: 'default',
+            unlockedSkins: ['default'],
+            highScore: 0
+        };
+    },
+
+    unlockSkin(skinId) {
+        const data = this.load();
+        if (!data.unlockedSkins.includes(skinId)) {
+            data.unlockedSkins.push(skinId);
+            this.save(data);
+        }
+    },
+
+    setSelectedSkin(skinId) {
+        const data = this.load();
+        data.selectedSkin = skinId;
+        this.save(data);
+    },
+
+    updateHighScore(score) {
+        const data = this.load();
+        if (score > data.highScore) {
+            data.highScore = score;
+            this.save(data);
+        }
+        return data.highScore;
+    }
+}; 
+

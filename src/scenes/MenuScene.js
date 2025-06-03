@@ -1,44 +1,83 @@
 import Phaser from 'phaser';
+import createStyledButton from '../utils/ButtonStyle';
 
 export class MenuScene extends Phaser.Scene {
     constructor() {
         super({ key: 'MenuScene' });
     }
 
+    preload() {
+        // Предзагрузим ягоды для кнопок
+        this.load.image('blueberry', 'assets/blueberry.png');
+        this.load.image('strawberry', 'assets/strawberry.png');
+    }
+    
     create() {
         const { width, height } = this.sys.game.config;
-        this.add.text(width / 2, height / 2 - 100, 'Berry Ninja', {
-            fontSize: '64px',
-            fill: '#fff',
-            fontFamily: 'Arial',
-            shadow: { offsetX: 2, offsetY: 2, color: '#b3b3b3', blur: 6, fill: true }
-        }).setOrigin(0.5);
+        const fontFamily = `'Open Sans', 'Roboto', 'Arial', sans-serif`; // Обновили шрифт
 
-        const playButton = this.add.text(width / 2, height / 2, 'Играть', {
-            fontSize: '40px',
-            fill: '#222',
-            backgroundColor: '#e6e6e6',
-            padding: { x: 40, y: 16 },
-            fontStyle: 'bold',
-            fontFamily: 'Arial',
-            shadow: { offsetX: 1, offsetY: 1, color: '#fff', blur: 4, fill: true }
-        }).setOrigin(0.5).setInteractive();
+        // Add background image
+        const bg = this.add.image(width / 2, height / 2, 'mainMenuBackground');
+        // Scale background to cover the entire screen
+        const scaleX = width / bg.width;
+        const scaleY = height / bg.height;
+        const scale = Math.max(scaleX, scaleY);
+        bg.setScale(scale).setScrollFactor(0);
+        bg.setDepth(-1); // Ensure background is behind other elements
 
-        playButton.on('pointerdown', () => {
-            this.scene.start('GameScene');
-        });
+        // Создаем кнопку "Играть" с ягодой слева - выше центра экрана
+        const buttonY1 = height * 0.35; // Позиция выше центра экрана, как на фото
+        
+        // Создаем контейнер для кнопки и ягоды, чтобы они двигались вместе
+        const playContainer = this.add.container(width / 2, buttonY1);
+        
+        // Добавляем ягоду голубику к кнопке Play
+        const blueberry = this.add.image(-150, -15, 'blueberry').setScale(0.65);
+        playContainer.add(blueberry);
+        
+        // Создаем кнопку Play
+        const { container: playButtonContainer } = createStyledButton(
+            this,
+            0, // Относительно контейнера
+            0, 
+            'PLAY',
+            () => {
+                this.scene.start('GameScene');
+            }
+        );
+        
+        // Добавляем кнопку в контейнер
+        playContainer.add(playButtonContainer);
+        
+        // Создаем кнопку "Магазин" с ягодой слева
+        const buttonY2 = height * 0.45; // Чуть ниже первой кнопки
+        
+        // Создаем контейнер для кнопки и ягоды
+        const shopContainer = this.add.container(width / 2, buttonY2);
+        
+        // Добавляем красную ягоду к кнопке Shop
+        const redberry = this.add.image(-150, -15, 'strawberry').setScale(0.8);
+        shopContainer.add(redberry);
+        
+        // Создаем кнопку Shop
+        const { container: shopButtonContainer } = createStyledButton(
+            this,
+            0, // Относительно контейнера
+            0,
+            'SHOP',
+            () => {
+                this.scene.start('ShopScene');
+            }
+        );
+        
+        // Добавляем кнопку в контейнер
+        shopContainer.add(shopButtonContainer);
 
-        const shopButton = this.add.text(width / 2, height / 2 + 80, 'Магазин', {
-            fontSize: '32px',
-            fill: '#222',
-            backgroundColor: '#e6e6e6',
-            padding: { x: 30, y: 12 },
-            fontFamily: 'Arial',
-            shadow: { offsetX: 1, offsetY: 1, color: '#fff', blur: 4, fill: true }
-        }).setOrigin(0.5).setInteractive();
-
-        shopButton.on('pointerdown', () => {
-            this.scene.start('ShopScene');
-        });
+        // Hide the initial HTML loading overlay if it's still visible
+        // This is a fallback, as main.js should handle it primarily
+        const loadingOverlay = document.getElementById('loading-overlay');
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
+        }
     }
-} 
+}
