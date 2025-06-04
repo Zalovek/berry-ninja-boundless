@@ -1,374 +1,485 @@
 import Phaser from 'phaser';
 import { skins } from '../data/skins';
-import createStyledButton from '../utils/ButtonStyle';
+import { uiStyles } from '../utils/uiStyles';
+import { createInteractiveButton } from '../utils/createInteractiveButton';
+import { saveManager } from '../utils/saveManager';
 
 export class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
         this.score = 0;
         this.lives = 3;
-        this.selectedSkin = 'default';
         this.berries = [];
         this.slashes = [];
         this.trailPoints = [];
         this.splashes = [];
-        this.shakeTime = 0;
+        this.gameOver = false;
+        this.bladeColor = 0xFFFFFF; // Цвет лезвия по умолчанию
+        this.bladeTrail = null;
+        this.bladeGraphics = null;
     }
 
     preload() {
         // Загружаем фон
         this.load.image('background', 'assets/background.png');
         
-        // Загружаем все скины
+        // Загружаем все скины ягод
         Object.values(skins).forEach(skin => {
             skin.assets.forEach(asset => {
                 this.load.image(asset, `assets/${asset}.png`);
             });
         });
         
-        // Загружаем бомбу
-        this.load.image('virus', 'assets/virus.gif');
+        // Загружаем бомбу и эффект взрыва
+        this.load.image('bomb', 'assets/bomb.png');
+        this.load.image('explosion', 'assets/explosion.png');
 
-        // Загружаем кляксы (допустим, их 4, если больше — увеличить цикл)
+        // Загружаем кляксы
         for (let i = 1; i <= 4; i++) {
             this.load.image(`mark${i}`, `assets/marks/Mark (${i}).png`);
         }
     }
 
     create() {
-        // Добавляем фон, растягивая на весь экран
-        const bg = this.add.image(0, 0, 'background').setOrigin(0, 0);
-        bg.displayWidth = this.sys.game.config.width;
-        bg.displayHeight = this.sys.game.config.height;
+        const { width, height } = this.cameras.main;
 
-        // Группа для клякс
+        // 1. Фон
+        this.add.image(width / 2, height / 2, 'background')
+            .setDisplaySize(width, height)
+            .setDepth(-2);
+
+        // 2. Создаем графику для лезвия
+        this.bladeGraphics = this.add.graphics();
+        
+        // Загружаем цвет лезвия из настроек
+        const saveData = saveManager.load();
+        this.bladeColor = saveData.bladeColor || 0xFFFFFF;
+        
+        // 3. Инициализируем массив для точек следа
+        this.trailPoints = [];
+        
+        // 4. Создаем группы для игровых объектов
+        this.berriesGroup = this.add.group();
+        this.bombsGroup = this.add.group();
         this.splashGroup = this.add.group();
-
-        // Создаем UI
-        this.scoreText = this.add.text(16, 16, 'Счет: 0', {
-            fontSize: '32px',
-            fill: '#fff'
-        });
-
-        this.livesText = this.add.text(16, 56, 'Жизни: 3', {
-            fontSize: '32px',
-            fill: '#fff'
-        });
-
-        // Добавляем обработчик движения мыши
+        
+        // 5. Отображение счета и жизней
+        this.createScoreAndLives();
+        
+        // 6. Обработчики событий
         this.input.on('pointermove', this.handlePointerMove, this);
-
-        // Запускаем таймер появления ягод
-        this.time.addEvent({
+        this.input.on('pointerdown', this.handlePointerDown, this);
+        this.input.on('pointerup', this.handlePointerUp, this);
+        
+        // 7. Таймеры для спавна ягод и бомб
+        this.berryTimer = this.time.addEvent({
             delay: 1000,
             callback: this.spawnBerry,
             callbackScope: this,
             loop: true
         });
-    }
-
-    update() {
-        // Обновляем позиции ягод
-        this.berries.forEach(berry => {
-            berry.x += berry.vx;
-            berry.y += berry.vy;
-            berry.vy += berry.gravity;
-            berry.angle += berry.rotationSpeed * 60;
-            // Эффект скорости (тень)
-            if (!berry.shadow) {
-                berry.shadow = this.add.ellipse(berry.x, berry.y + 20, 40, 18, 0x000000, 0.2);
-                berry.shadow.setDepth(-1);
-            }
-            berry.shadow.x = berry.x;
-            berry.shadow.y = berry.y + 20;
-            
-            // Если ягода упала за пределы экрана
-            if (berry.y > this.sys.game.config.height + 60) {
-                if (berry.shadow) berry.shadow.destroy();
-                berry.destroy();
-                this.berries = this.berries.filter(b => b !== berry);
-                this.lives--;
-                this.livesText.setText(`Жизни: ${this.lives}`);
-                
-                if (this.lives <= 0) {
-                    this.gameOver();
-                }
-            }
+        
+        this.bombTimer = this.time.addEvent({
+            delay: 3000,
+            callback: this.spawnBomb,
+            callbackScope: this,
+            loop: true
         });
-
-        // Обновляем след лезвия
-        this.drawBladeTrail();
-
-        // Обновляем кляксы
-        this.splashes.forEach((splash, i) => {
-            splash.alpha -= 0.007;
-            splash.y += 1;
-            if (splash.alpha <= 0) {
-                splash.destroy();
-                this.splashes.splice(i, 1);
-            }
+        
+        // 8. Кнопка возврата в меню
+        this.createBackButton();
+    }
+    
+    createScoreAndLives() {
+        const { width } = this.cameras.main;
+        
+        // Счет
+        this.scoreText = this.add.text(20, 20, 'Счет: 0', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '32px',
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 6
         });
-
-        // Тряска экрана
-        if (this.shakeTime > 0) {
-            this.cameras.main.shake(50, 0.01);
-            this.shakeTime--;
-        }
+        
+        // Жизни
+        this.livesText = this.add.text(width - 20, 20, 'Жизни: 3', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '32px',
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 6
+        }).setOrigin(1, 0);
     }
-
-    spawnBerry() {
-        const x = Phaser.Math.Between(100, this.sys.game.config.width - 100);
-        // Собираем все assets из unlockedSkins
-        const saveData = JSON.parse(localStorage.getItem('berry-ninja-save'));
-        let berryAssets = [];
-        if (saveData && saveData.unlockedSkins) {
-            saveData.unlockedSkins.forEach(skinId => {
-                if (skins[skinId]) {
-                    berryAssets = berryAssets.concat(skins[skinId].assets);
-                }
-            });
-        } else {
-            berryAssets = skins['default'].assets;
-        }
-        const berryAsset = Phaser.Utils.Array.GetRandom(berryAssets);
-        const berry = this.add.image(x, this.sys.game.config.height + 50, berryAsset);
-        berry.setScale(0.5);
-        // Физика подбрасывания
-        berry.vx = Phaser.Math.FloatBetween(-2, 2);
-        berry.vy = Phaser.Math.Between(-20, -14);
-        berry.gravity = 0.7;
-        berry.rotationSpeed = Phaser.Math.FloatBetween(-0.05, 0.05);
-        this.berries.push(berry);
+    
+    createBackButton() {
+        const { width, height } = this.cameras.main;
+        
+        const backButton = this.add.text(width - 20, height - 20, 'МЕНЮ', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '24px',
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(1, 1)
+        .setInteractive()
+        .on('pointerdown', () => {
+            this.scene.start('MenuScene');
+        });
     }
-
+    
     handlePointerMove(pointer) {
-        this.trailPoints.push({ x: pointer.x, y: pointer.y });
-        if (this.trailPoints.length > 10    ) {
-            this.trailPoints.shift();
+        // Добавляем новую точку в начало массива
+        this.trailPoints.unshift({ x: pointer.x, y: pointer.y, time: this.time.now });
+        
+        // Ограничиваем количество точек для оптимизации
+        if (this.trailPoints.length > 20) {
+            this.trailPoints.pop();
         }
-        // Проверяем пересечение линии с ягодами
-        if (this.trailPoints.length >= 2) {
-            const p1 = this.trailPoints[this.trailPoints.length - 2];
-            const p2 = this.trailPoints[this.trailPoints.length - 1];
-            this.berries.forEach(berry => {
-                if (berry._destroyed) return;
-                const intersect = this.lineIntersectsCircle(p1, p2, { x: berry.x, y: berry.y, r: berry.displayWidth / 2 });
-                if (intersect) {
-                    // Разрезаем ягоду
-                    this.sliceBerry(berry, p2);
-                }
-            });
-        }
+        
+        // Проверяем столкновения с ягодами и бомбами
+        this.checkCollisions(pointer);
     }
-
+    
+    handlePointerDown(pointer) {
+        // Начинаем отслеживать движение лезвия
+        this.isSlicing = true;
+    }
+    
+    handlePointerUp() {
+        // Прекращаем отслеживать движение лезвия
+        this.isSlicing = false;
+        
+        // Очищаем точки следа
+        this.trailPoints = [];
+    }
+    
+    checkCollisions(pointer) {
+        if (!this.isSlicing || this.trailPoints.length < 2) return;
+        
+        // Получаем последние две точки для проверки пересечения
+        const p1 = this.trailPoints[0];
+        const p2 = this.trailPoints[1];
+        
+        // Проверяем столкновения с ягодами
+        this.berriesGroup.getChildren().forEach(berry => {
+            if (!berry.sliced && this.lineIntersectsCircle(p1, p2, berry)) {
+                this.sliceBerry(berry);
+            }
+        });
+        
+        // Проверяем столкновения с бомбами
+        this.bombsGroup.getChildren().forEach(bomb => {
+            if (!bomb.exploded && this.lineIntersectsCircle(p1, p2, bomb)) {
+                this.explodeBomb(bomb);
+            }
+        });
+    }
+    
     lineIntersectsCircle(p1, p2, circle) {
-        // Алгоритм пересечения отрезка и круга
-        const { x: cx, y: cy, r } = circle;
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        const fx = p1.x - cx;
-        const fy = p1.y - cy;
-        const a = dx * dx + dy * dy;
-        const b = 2 * (fx * dx + fy * dy);
-        const c = (fx * fx + fy * fy) - r * r;
-        let discriminant = b * b - 4 * a * c;
-        if (discriminant < 0) return false;
-        discriminant = Math.sqrt(discriminant);
-        const t1 = (-b - discriminant) / (2 * a);
-        const t2 = (-b + discriminant) / (2 * a);
-        if ((t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1)) return true;
-        return false;
+        // Расстояние от точки до линии
+        const x1 = p1.x;
+        const y1 = p1.y;
+        const x2 = p2.x;
+        const y2 = p2.y;
+        const cx = circle.x;
+        const cy = circle.y;
+        const r = circle.displayWidth / 2;
+        
+        // Вектор линии
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        
+        // Параметризованная позиция круга относительно линии
+        const t = ((cx - x1) * dx + (cy - y1) * dy) / (dx * dx + dy * dy);
+        
+        // Находим ближайшую точку на линии к центру круга
+        let closestX, closestY;
+        if (t < 0) {
+            closestX = x1;
+            closestY = y1;
+        } else if (t > 1) {
+            closestX = x2;
+            closestY = y2;
+        } else {
+            closestX = x1 + t * dx;
+            closestY = y1 + t * dy;
+        }
+        
+        // Расстояние от ближайшей точки до центра круга
+        const distance = Math.sqrt((closestX - cx) ** 2 + (closestY - cy) ** 2);
+        
+        return distance <= r;
     }
-
-    sliceBerry(berry, point) {
-        if (berry._destroyed) return;
-        berry._destroyed = true;
+    
+    spawnBerry() {
+        if (this.gameOver) return;
+        
+        const { width, height } = this.cameras.main;
+        
+        // Выбираем случайную ягоду из доступных
+        const berryTypes = skins.default.assets;
+        const berryType = berryTypes[Phaser.Math.Between(0, berryTypes.length - 1)];
+        
+        // Создаем ягоду
+        const x = Phaser.Math.Between(100, width - 100);
+        const berry = this.add.image(x, height + 50, berryType);
+        
+        // Устанавливаем размер в зависимости от типа
+        const scale = Phaser.Math.FloatBetween(0.6, 1.0);
+        berry.setScale(scale);
+        
+        // Добавляем физику
+        this.physics.add.existing(berry);
+        berry.body.setVelocity(
+            Phaser.Math.Between(-200, 200),
+            Phaser.Math.Between(-800, -600)
+        );
+        berry.body.setGravityY(300);
+        
+        // Добавляем свойства для отслеживания состояния
+        berry.sliced = false;
+        
+        // Добавляем в группу
+        this.berriesGroup.add(berry);
+    }
+    
+    spawnBomb() {
+        if (this.gameOver) return;
+        
+        const { width, height } = this.cameras.main;
+        
+        // Создаем бомбу
+        const x = Phaser.Math.Between(100, width - 100);
+        const bomb = this.add.image(x, height + 50, 'bomb');
+        
+        // Устанавливаем размер
+        bomb.setScale(0.7);
+        
+        // Добавляем физику
+        this.physics.add.existing(bomb);
+        bomb.body.setVelocity(
+            Phaser.Math.Between(-150, 150),
+            Phaser.Math.Between(-700, -500)
+        );
+        bomb.body.setGravityY(300);
+        
+        // Добавляем свойства для отслеживания состояния
+        bomb.exploded = false;
+        
+        // Добавляем в группу
+        this.bombsGroup.add(bomb);
+    }
+    
+    sliceBerry(berry) {
+        // Помечаем ягоду как разрезанную
+        berry.sliced = true;
+        
+        // Создаем две половинки ягоды с разным направлением движения
+        const leftHalf = this.add.image(berry.x, berry.y, berry.texture.key).setScale(berry.scaleX, berry.scaleY);
+        const rightHalf = this.add.image(berry.x, berry.y, berry.texture.key).setScale(berry.scaleX, berry.scaleY);
+        
+        // Добавляем физику к половинкам
+        this.physics.add.existing(leftHalf);
+        this.physics.add.existing(rightHalf);
+        
+        // Устанавливаем скорости половинок
+        leftHalf.body.setVelocity(berry.body.velocity.x - 100, berry.body.velocity.y);
+        rightHalf.body.setVelocity(berry.body.velocity.x + 100, berry.body.velocity.y);
+        leftHalf.body.setGravityY(300);
+        rightHalf.body.setGravityY(300);
+        
+        // Добавляем вращение
+        leftHalf.body.setAngularVelocity(-300);
+        rightHalf.body.setAngularVelocity(300);
+        
+        // Создаем эффект кляксы в месте разреза
+        const splashIndex = Phaser.Math.Between(1, 4);
+        const splash = this.add.image(berry.x, berry.y, `mark${splashIndex}`);
+        splash.setScale(0.5);
+        splash.setAlpha(0.8);
+        
+        // Подбираем цвет кляксы в зависимости от типа ягоды
+        let tint;
+        switch(berry.texture.key) {
+            case 'blueberry': tint = 0x3498db; break;
+            case 'strawberry': tint = 0xe74c3c; break;
+            case 'cranberry': tint = 0xc0392b; break;
+            case 'renderBerry': tint = 0x9b59b6; break;
+            default: tint = 0xffffff;
+        }
+        splash.setTint(tint);
+        
+        // Добавляем анимацию исчезновения кляксы
+        this.tweens.add({
+            targets: splash,
+            alpha: 0,
+            duration: 1000,
+            onComplete: () => {
+                splash.destroy();
+            }
+        });
+        
+        // Добавляем очки
         this.score += 10;
         this.scoreText.setText(`Счет: ${this.score}`);
-        // Клякса
-        const markCount = 4;
-        const markIndex = Phaser.Math.Between(1, markCount);
-        const splash = this.add.image(point.x, point.y, `mark${markIndex}`);
-        splash.setDepth(10);
-        splash.alpha = 0.7;
-        splash.setScale(Phaser.Math.FloatBetween(0.7, 1.1));
-        let tint = 0xff0000;
-        if (berry.texture.key.includes('blue')) tint = 0x2a4fff;
-        if (berry.texture.key.includes('straw')) tint = 0xff5e00;
-        if (berry.texture.key.includes('reka')) tint = 0x7b2ff2;
-        if (berry.texture.key.includes('kashvi')) tint = 0x00ffb3;
-        splash.setTint(tint);
-        this.splashes.push(splash);
-        // Вспышка на следе
-        if (this.bladeGraphics) {
-            this.bladeGraphics.save();
-            this.bladeGraphics.lineStyle(24, 0xffffff, 0.3);
-            this.bladeGraphics.strokeCircle(point.x, point.y, 24);
-            this.bladeGraphics.restore();
-        }
-        // Эффект распада: две половинки
-        const angle = Phaser.Math.FloatBetween(-Math.PI / 4, Math.PI / 4);
-        const offset = 30;
-        const half1 = this.add.image(berry.x - offset, berry.y, berry.texture.key).setScale(0.25, 0.5);
-        const half2 = this.add.image(berry.x + offset, berry.y, berry.texture.key).setScale(0.25, 0.5);
-        half1.angle = berry.angle - 15;
-        half2.angle = berry.angle + 15;
-        // Анимация разлёта
-        this.tweens.add({
-            targets: half1,
-            x: half1.x - 60,
-            y: half1.y + 60,
-            angle: half1.angle - 30,
-            alpha: 0,
-            duration: 600,
-            onComplete: () => half1.destroy()
-        });
-        this.tweens.add({
-            targets: half2,
-            x: half2.x + 60,
-            y: half2.y + 60,
-            angle: half2.angle + 30,
-            alpha: 0,
-            duration: 600,
-            onComplete: () => half2.destroy()
-        });
-        // Сок (маленькие кляксы)
-        for (let i = 0; i < 4; i++) {
-            const drop = this.add.image(point.x, point.y, `mark${Phaser.Math.Between(1, markCount)}`);
-            drop.setScale(Phaser.Math.FloatBetween(0.2, 0.4));
-            drop.setTint(tint);
-            drop.alpha = 0.8;
-            this.tweens.add({
-                targets: drop,
-                x: point.x + Phaser.Math.Between(-40, 40),
-                y: point.y + Phaser.Math.Between(20, 60),
-                alpha: 0,
-                duration: 500,
-                onComplete: () => drop.destroy()
-            });
-        }
-        // Удаляем ягоду
-        if (berry.shadow) berry.shadow.destroy();
+        
+        // Уничтожаем оригинальную ягоду
         berry.destroy();
-        this.berries = this.berries.filter(b => b !== berry);
+        
+        // Удаляем половинки через некоторое время
+        this.time.delayedCall(2000, () => {
+            leftHalf.destroy();
+            rightHalf.destroy();
+        });
     }
-
-    drawBladeTrail() {
-        if (this.bladeGraphics) this.bladeGraphics.clear();
-        else this.bladeGraphics = this.add.graphics();
-        this.bladeGraphics.clear();
-        if (this.trailPoints.length < 3) return;
-        this.bladeGraphics.save();
-        this.bladeGraphics.setDepth(20);
-        const n = this.trailPoints.length - 1;
-        // Catmull-Rom сглаживание (или простое сглаживание)
-        for (let i = 1; i < this.trailPoints.length - 1; i++) {
-            const t = i / n;
-            const width = 4 + 16 * Math.sin(Math.PI * t);
-            let color = Phaser.Display.Color.Interpolate.ColorWithColor(
-                new Phaser.Display.Color(220, 220, 230),
-                new Phaser.Display.Color(255, 255, 255),
-                n,
-                i
-            );
-            const hex = Phaser.Display.Color.GetColor(color.r, color.g, color.b);
-            this.bladeGraphics.lineStyle(width, hex, 1);
-            this.bladeGraphics.beginPath();
-            // Усредняем точки для плавности
-            const p0 = this.trailPoints[i - 1];
-            const p1 = this.trailPoints[i];
-            const p2 = this.trailPoints[i + 1];
-            const mx1 = (p0.x + p1.x) / 2;
-            const my1 = (p0.y + p1.y) / 2;
-            const mx2 = (p1.x + p2.x) / 2;
-            const my2 = (p1.y + p2.y) / 2;
-            this.bladeGraphics.moveTo(mx1, my1);
-            this.bladeGraphics.lineTo(mx2, my2);
-            this.bladeGraphics.strokePath();
-            this.bladeGraphics.closePath();
+    
+    explodeBomb(bomb) {
+        // Помечаем бомбу как взорванную
+        bomb.exploded = true;
+        
+        // Создаем эффект взрыва
+        const explosion = this.add.image(bomb.x, bomb.y, 'explosion').setScale(0);
+        
+        // Анимация взрыва
+        this.tweens.add({
+            targets: explosion,
+            scale: 2,
+            alpha: { from: 1, to: 0 },
+            duration: 500,
+            onComplete: () => {
+                explosion.destroy();
+            }
+        });
+        
+        // Уменьшаем количество жизней
+        this.lives--;
+        this.livesText.setText(`Жизни: ${this.lives}`);
+        
+        // Проверяем условие окончания игры
+        if (this.lives <= 0) {
+            this.endGame();
         }
-        this.bladeGraphics.restore();
+        
+        // Уничтожаем бомбу
+        bomb.destroy();
+        
+        // Эффект тряски камеры
+        this.cameras.main.shake(300, 0.02);
     }
-
-    gameOver() {
-        // Останавливаем все таймеры и обработчики
-        this.time.removeAllEvents();
-        this.input.off('pointermove', this.handlePointerMove, this);
-
-        // Создаем затемнение
-        const overlay = this.add.rectangle(0, 0, this.sys.game.config.width, this.sys.game.config.height, 0x000000, 0.7);
-        overlay.setOrigin(0, 0);
-
-        // Текст Game Over
-        this.add.text(400, 200, 'Игра окончена', {
+    
+    update() {
+        // Обновляем след лезвия
+        this.drawBladeTrail();
+        
+        // Удаляем объекты, вышедшие за пределы экрана
+        this.cleanupObjects();
+    }
+    
+    drawBladeTrail() {
+        // Очищаем предыдущий след
+        this.bladeGraphics.clear();
+        
+        // Если нет точек или не режем, не рисуем след
+        if (this.trailPoints.length < 2 || !this.isSlicing) return;
+        
+        // Рисуем след лезвия с выбранным цветом
+        this.bladeGraphics.lineStyle(6, this.bladeColor, 1);
+        
+        // Начинаем путь с первой точки
+        this.bladeGraphics.beginPath();
+        this.bladeGraphics.moveTo(this.trailPoints[0].x, this.trailPoints[0].y);
+        
+        // Соединяем точки
+        for (let i = 1; i < this.trailPoints.length; i++) {
+            this.bladeGraphics.lineTo(this.trailPoints[i].x, this.trailPoints[i].y);
+        }
+        
+        // Завершаем путь
+        this.bladeGraphics.strokePath();
+    }
+    
+    cleanupObjects() {
+        const { height } = this.cameras.main;
+        
+        // Удаляем ягоды, вышедшие за нижнюю границу экрана
+        this.berriesGroup.getChildren().forEach(berry => {
+            if (berry.y > height + 100) {
+                berry.destroy();
+            }
+        });
+        
+        // Удаляем бомбы, вышедшие за нижнюю границу экрана
+        this.bombsGroup.getChildren().forEach(bomb => {
+            if (bomb.y > height + 100) {
+                bomb.destroy();
+            }
+        });
+    }
+    
+    endGame() {
+        // Устанавливаем флаг окончания игры
+        this.gameOver = true;
+        
+        // Останавливаем таймеры
+        this.berryTimer.remove();
+        this.bombTimer.remove();
+        
+        // Сохраняем лучший результат
+        const saveData = saveManager.load();
+        if (this.score > (saveData.highScore || 0)) {
+            saveData.highScore = this.score;
+            saveManager.save(saveData);
+        }
+        
+        // Отображаем экран окончания игры
+        const { width, height } = this.cameras.main;
+        
+        // Затемнение
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.7);
+        
+        // Текст "Game Over"
+        this.add.text(width / 2, height / 3, 'GAME OVER', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '64px',
+            fill: '#FFFFFF',
+            stroke: '#FF0000',
+            strokeThickness: 6
+        }).setOrigin(0.5);
+        
+        // Итоговый счет
+        this.add.text(width / 2, height / 2, `Счет: ${this.score}`, {
+            fontFamily: '"Impact", fantasy',
             fontSize: '48px',
-            fill: '#fff'
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 5
         }).setOrigin(0.5);
-
-        // Показываем финальный счет
-        this.add.text(400, 280, `Счет: ${this.score}`, {
-            fontSize: '32px',
-            fill: '#fff'
-        }).setOrigin(0.5);
-
-        // Кнопка "Начать заново" с новым дизайном
-        const { container: restartButtonContainer } = createStyledButton(
-            this, 
-            400, 
-            360, 
-            'Играть снова', 
-            () => {
-                // Явно перезапускаем сцену
-                this.scene.stop('GameScene');
-                this.scene.start('GameScene');
-            },
-            {
-                width: 250,
-                height: 60,
-                fontSize: '24px',
-                fillColor: 0xFFFFFF,
-                fillAlpha: 0.5,
-                cornerRadius: 36,
-                textColor: '#565656',
-                fontStyle: 'italic bold'
-            }
-        );
         
-        // Добавляем ягоду к кнопке рестарта
-        const blueberry = this.add.image(
-            400 - 125, // Позиция слева от текста
-            360 - 15,  // Немного выше центра кнопки
-            'blueberry'
-        ).setScale(0.65);
-
-        // Кнопка "В меню" с новым дизайном
-        const { container: menuButtonContainer } = createStyledButton(
-            this, 
-            400, 
-            440, 
-            'В меню', 
-            () => {
-                // Явно останавливаем текущую сцену и запускаем меню
-                this.scene.stop('GameScene');
-                this.scene.start('MenuScene');
-            },
-            {
-                width: 250,
-                height: 60,
-                fontSize: '24px',
-                fillColor: 0xFFFFFF,
-                fillAlpha: 0.5,
-                cornerRadius: 36,
-                textColor: '#565656',
-                fontStyle: 'italic bold'
-            }
-        );
+        // Кнопка "Играть снова"
+        const restartButton = this.add.text(width / 2, height * 2/3, 'ИГРАТЬ СНОВА', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '36px',
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5)
+        .setInteractive()
+        .on('pointerdown', () => {
+            this.scene.restart();
+        });
         
-        // Добавляем ягоду к кнопке меню
-        const redberry = this.add.image(
-            400 - 125, // Позиция слева от текста
-            440 - 15,  // Немного выше центра кнопки
-            'strawberry'
-        ).setScale(0.8);
+        // Кнопка "Меню"
+        const menuButton = this.add.text(width / 2, height * 2/3 + 60, 'МЕНЮ', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '36px',
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5)
+        .setInteractive()
+        .on('pointerdown', () => {
+            this.scene.start('MenuScene');
+        });
     }
 } 

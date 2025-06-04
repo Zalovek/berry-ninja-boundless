@@ -1,141 +1,270 @@
 import Phaser from 'phaser';
-import { skins } from '../data/skins';
+import { uiStyles } from '../utils/uiStyles';
+import { createInteractiveButton } from '../utils/createInteractiveButton';
 import { saveManager } from '../utils/saveManager';
-import createStyledButton from '../utils/ButtonStyle';
+import { skins } from '../data/skins';
 
-export class ShopScene extends Phaser.Scene {
+export default class ShopScene extends Phaser.Scene {
     constructor() {
         super({ key: 'ShopScene' });
+        this.selectedItem = null;
+        this.coins = 0;
     }
 
     preload() {
-        // Ensure save data is loaded before create method uses it
-        this.saveData = saveManager.load();
+        // Загрузка фона и скинов
+        this.load.image('shop_background', 'assets/ShopBackground.jpg');
     }
 
     create() {
-        const { width, height } = this.sys.game.config;
+        const { width, height } = this.cameras.main;
 
-        // Add background image
-        const bg = this.add.image(width / 2, height / 2, 'shopBackground');
-        const scaleX = width / bg.width;
-        const scaleY = height / bg.height;
-        const scale = Math.max(scaleX, scaleY);
-        bg.setScale(scale).setScrollFactor(0);
-        bg.setDepth(-1);
+        // 1. Фон
+        this.add.image(width / 2, height / 2, 'shop_background')
+            .setDisplaySize(width, height)
+            .setDepth(-2);
 
-        // Создаем кнопку "Назад" с обновленным дизайном
-        const { container: backButtonContainer } = createStyledButton(
-            this,
-            60, 
-            50, 
-            '← Назад', 
-            () => this.scene.start('MenuScene'),
-            { 
-                width: 120, 
-                height: 40,
-                fillColor: 0xFFFFFF,
-                fillAlpha: 0.5, 
-                cornerRadius: 20
-            }
-        );
+        // Добавляем затемнение для лучшей читаемости
+        const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.3)
+            .setDepth(-1);
 
-        // Отображение скинов
-        const itemWidth = width * 0.7;
-        const itemHeight = 90;
-        const itemCornerRadius = 15;
-        let startY = height * 0.2;
-        const spacingY = itemHeight + 20;
-        const buttonItemWidth = 150;
-        const buttonItemHeight = 45;
+        // 2. Заголовок
+        this.add.text(width / 2, height * 0.1, 'МАГАЗИН', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '48px',
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 6,
+            align: 'center'
+        }).setOrigin(0.5);
 
-        Object.values(skins).forEach((skin, index) => {
-            const currentY = startY + index * spacingY;
-            const skinContainer = this.add.container(width / 2, currentY);
-            
-            // Фон для скина (card-like)
-            const itemBackground = this.add.graphics();
-            itemBackground.fillStyle(0x000000, 0.5); // Semi-transparent dark background for the card
-            itemBackground.fillRoundedRect(-itemWidth / 2, -itemHeight / 2, itemWidth, itemHeight, itemCornerRadius);
-            skinContainer.add(itemBackground);
+        // 3. Баланс монет
+        const saveData = saveManager.load();
+        this.coins = saveData.coins || 0;
 
-            // Название скина
-            const nameText = this.add.text(-itemWidth / 2 + 20, -itemHeight / 2 + 25, skin.name, {
-                fontSize: '22px',
+        const coinText = this.add.text(
+            width / 2,
+            height * 0.2,
+            `Очки: ${this.coins}`,
+            {
+                fontFamily: '"Impact", fantasy',
+                fontSize: '36px',
                 fill: '#FFFFFF',
-                fontFamily: "'SF Pro Display', 'Roboto', 'Arial', sans-serif",
-                fontStyle: 'bold'
-            }).setOrigin(0, 0.5);
-            skinContainer.add(nameText);
+                stroke: '#000000',
+                strokeThickness: 5,
+                align: 'center'
+            }
+        ).setOrigin(0.5);
 
-            // Цена
-            const priceTextY = -itemHeight/2 + 55;
-            const priceText = this.add.text(-itemWidth / 2 + 20, priceTextY, `${skin.price} очков`, {
-                fontSize: '18px',
-                fill: '#CCCCCC', // Lighter grey for price
-                fontFamily: "'SF Pro Display', 'Roboto', 'Arial', sans-serif"
-            }).setOrigin(0, 0.5);
-            skinContainer.add(priceText);
+        // 4. Отображение покупных скинов
+        this.displayShopItems();
 
-            // Кнопка покупки/выбора
-            const isUnlocked = this.saveData.unlockedSkins.includes(skin.id);
-            const isSelected = this.saveData.selectedSkin === skin.id;
-            const canAfford = this.saveData.highScore >= skin.price;
+        // 5. Кнопка "Назад"
+        this.createBackButton();
+    }
 
-            let buttonText = '';
-            let buttonOptions = {};
-            let clickHandler = () => {};
-
-            const commonButtonOptions = {
-                width: buttonItemWidth,
-                height: buttonItemHeight,
-                fontSize: '18px',
-                cornerRadius: 20
-            };
-
-            if (isSelected) {
-                buttonText = 'Выбрано';
-                buttonOptions = { ...commonButtonOptions, fillColor: 0x28a745, fillAlpha: 0.9 }; // Green
-                // No click handler needed or a simple one if you want to allow deselecting (not typical)
-            } else if (isUnlocked) {
-                buttonText = 'Выбрать';
-                buttonOptions = { ...commonButtonOptions, fillColor: 0x007bff, fillAlpha: 0.8 }; // Blue
-                clickHandler = () => {
-                    saveManager.setSelectedSkin(skin.id);
-                    this.scene.restart();
-                };
-            } else { // Locked
-                buttonText = 'Купить';
-                if (canAfford) {
-                    buttonOptions = { ...commonButtonOptions, fillColor: 0x17a2b8, fillAlpha: 0.8 }; // Cyan/Teal
-                    clickHandler = () => {
-                        saveManager.unlockSkin(skin.id);
-                        saveManager.setSelectedSkin(skin.id); // Auto-select after purchase
-                        this.saveData = saveManager.load(); // Reload save data to reflect purchase
-                        this.scene.restart();
-                    };
-                } else {
-                    buttonOptions = { ...commonButtonOptions, fillColor: 0x6c757d, fillAlpha: 0.6, textColor: '#AAAAAA' }; // Greyed out
-                    // Optional: Add a visual cue or small temporary text for 'not enough points'
-                    clickHandler = () => {
-                        // Simple feedback: maybe a small text appears briefly
-                        const feedbackText = this.add.text(width / 2, height - 50, 'Недостаточно очков!', {
-                            fontSize: '20px', fill: '#ff4444', backgroundColor: 'rgba(0,0,0,0.7)', padding: {x:10, y:5}
-                        }).setOrigin(0.5);
-                        this.time.delayedCall(2000, () => feedbackText.destroy());
-                    };
-                }
+    displayShopItems() {
+        const { width, height } = this.cameras.main;
+        
+        // Получаем доступные скины для покупки
+        const shopSkins = ['kashvi', 'littleBrother', 'cranberry'];
+        const prices = [500, 250, 100]; // Цены для каждого скина
+        
+        // Расположение скинов в ряд
+        const itemWidth = width * 0.25;
+        const spacing = width * 0.1;
+        const startX = width / 2 - (itemWidth + spacing);
+        const itemY = height * 0.5;
+        
+        // Создаем карточки для каждого скина
+        shopSkins.forEach((skinKey, index) => {
+            const x = startX + index * (itemWidth + spacing / 2);
+            this.createSkinCard(x, itemY, skinKey, prices[index]);
+        });
+    }
+    
+    createSkinCard(x, y, skinKey, price) {
+        const cardWidth = 200;
+        const cardHeight = 280;
+        
+        // Создаем карточку
+        const card = this.add.graphics();
+        card.fillStyle(0xFFFFFF, 1);
+        card.fillRoundedRect(x - cardWidth/2, y - cardHeight/2, cardWidth, cardHeight, 10);
+        card.lineStyle(4, 0x000000, 1);
+        card.strokeRoundedRect(x - cardWidth/2, y - cardHeight/2, cardWidth, cardHeight, 10);
+        
+        // Добавляем изображение скина
+        const skinImage = this.add.image(x, y - cardHeight/4, skinKey)
+            .setDisplaySize(cardWidth * 0.8, cardWidth * 0.8);
+        
+        // Добавляем название скина
+        const skinName = skinKey.charAt(0).toUpperCase() + skinKey.slice(1);
+        this.add.text(x, y + cardHeight/4 - 40, skinName, {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '24px',
+            fill: '#000000',
+            align: 'center'
+        }).setOrigin(0.5);
+        
+        // Добавляем цену
+        this.add.text(x, y + cardHeight/4 + 10, `${price} очков`, {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '20px',
+            fill: '#000000',
+            align: 'center'
+        }).setOrigin(0.5);
+        
+        // Добавляем кнопку покупки
+        const buttonWidth = cardWidth * 0.8;
+        const buttonHeight = 40;
+        const button = this.add.graphics();
+        button.fillStyle(0x000000, 1);
+        button.fillRoundedRect(x - buttonWidth/2, y + cardHeight/4 + 40 - buttonHeight/2, buttonWidth, buttonHeight, 8);
+        
+        const buttonText = this.add.text(x, y + cardHeight/4 + 40, 'КУПИТЬ', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '20px',
+            fill: '#FFFFFF',
+            align: 'center'
+        }).setOrigin(0.5);
+        
+        // Делаем кнопку интерактивной
+        const hitArea = new Phaser.Geom.Rectangle(x - buttonWidth/2, y + cardHeight/4 + 40 - buttonHeight/2, buttonWidth, buttonHeight);
+        const hitAreaCallback = Phaser.Geom.Rectangle.Contains;
+        
+        this.add.zone(x, y + cardHeight/4 + 40, buttonWidth, buttonHeight)
+            .setOrigin(0.5)
+            .setInteractive({ hitArea, hitAreaCallback })
+            .on('pointerdown', () => {
+                this.buySkin(skinKey, price);
+            })
+            .on('pointerover', () => {
+                button.clear();
+                button.fillStyle(0x333333, 1);
+                button.fillRoundedRect(x - buttonWidth/2, y + cardHeight/4 + 40 - buttonHeight/2, buttonWidth, buttonHeight, 8);
+            })
+            .on('pointerout', () => {
+                button.clear();
+                button.fillStyle(0x000000, 1);
+                button.fillRoundedRect(x - buttonWidth/2, y + cardHeight/4 + 40 - buttonHeight/2, buttonWidth, buttonHeight, 8);
+            });
+    }
+    
+    buySkin(skinKey, price) {
+        const saveData = saveManager.load();
+        
+        // Проверяем, достаточно ли очков для покупки
+        if (this.coins >= price) {
+            // Вычитаем стоимость
+            this.coins -= price;
+            saveData.coins = this.coins;
+            
+            // Разблокируем скин
+            if (!saveData.unlockedSkins) {
+                saveData.unlockedSkins = [];
             }
             
-            const { container: buttonContainer } = createStyledButton(
-                this, 
-                itemWidth / 2 - (buttonItemWidth / 2) - 20, // Position button to the right of the card
-                0, // Centered vertically within the card
-                buttonText, 
-                clickHandler,
-                buttonOptions
-            );
-            skinContainer.add(buttonContainer);
+            if (!saveData.unlockedSkins.includes(skinKey)) {
+                saveData.unlockedSkins.push(skinKey);
+            }
+            
+            // Сохраняем изменения
+            saveManager.save(saveData);
+            
+            // Показываем сообщение об успешной покупке
+            this.showMessage('Скин разблокирован!', 0x00FF00);
+            
+            // Обновляем отображение очков
+            this.scene.restart();
+        } else {
+            // Показываем сообщение о недостаточном количестве очков
+            this.showMessage('Недостаточно очков!', 0xFF0000);
+        }
+    }
+    
+    showMessage(text, color) {
+        const { width, height } = this.cameras.main;
+        
+        // Создаем сообщение
+        const message = this.add.text(width / 2, height / 2, text, {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '36px',
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 5,
+            align: 'center'
+        }).setOrigin(0.5)
+        .setDepth(100);
+        
+        // Анимация появления и исчезновения
+        this.tweens.add({
+            targets: message,
+            alpha: { from: 0, to: 1 },
+            y: { from: height / 2 - 50, to: height / 2 },
+            duration: 300,
+            ease: 'Power2',
+            onComplete: () => {
+                this.tweens.add({
+                    targets: message,
+                    alpha: { from: 1, to: 0 },
+                    y: { from: height / 2, to: height / 2 - 50 },
+                    delay: 1000,
+                    duration: 300,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        message.destroy();
+                    }
+                });
+            }
         });
+    }
+    
+    createBackButton() {
+        const { width, height } = this.cameras.main;
+        
+        // Создаем кнопку "Назад"
+        const buttonWidth = width * 0.3;
+        const buttonHeight = 60;
+        const button = this.add.graphics();
+        button.fillStyle(0xFFFFFF, 1);
+        button.fillRoundedRect(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight, 10);
+        button.lineStyle(4, 0x000000, 1);
+        button.strokeRoundedRect(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight, 10);
+        
+        // Добавляем текст
+        const buttonText = this.add.text(width / 2, height * 0.85, 'НАЗАД', {
+            fontFamily: '"Impact", fantasy',
+            fontSize: '30px',
+            fill: '#000000',
+            align: 'center'
+        }).setOrigin(0.5);
+        
+        // Делаем кнопку интерактивной
+        const hitArea = new Phaser.Geom.Rectangle(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight);
+        const hitAreaCallback = Phaser.Geom.Rectangle.Contains;
+        
+        this.add.zone(width / 2, height * 0.85, buttonWidth, buttonHeight)
+            .setOrigin(0.5)
+            .setInteractive({ hitArea, hitAreaCallback })
+            .on('pointerdown', () => {
+                // Эффект нажатия
+                this.tweens.add({
+                    targets: [buttonText, button],
+                    scaleX: 0.95,
+                    scaleY: 0.95,
+                    duration: 100,
+                    yoyo: true,
+                    onComplete: () => {
+                        this.scene.start('MenuScene');
+                    }
+                });
+            })
+            .on('pointerover', () => {
+                buttonText.setTint(0x555555);
+            })
+            .on('pointerout', () => {
+                buttonText.clearTint();
+            });
     }
 } 

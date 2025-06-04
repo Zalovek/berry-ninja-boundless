@@ -1,70 +1,142 @@
 import Phaser from 'phaser';
+import { uiStyles } from '../utils/uiStyles';
 
 export class BootScene extends Phaser.Scene {
     constructor() {
         super({ key: 'BootScene' });
-        // Добавляем флаг для отслеживания состояния загрузки
         this.assetsLoaded = false;
-        this.minLoadingTime = 5000; // Увеличиваем до 5 секунд, чтобы анимация проигралась полностью
-        this.loadingStartTime = 0;
+        this.minLoadingTime = 1000; // Минимальное время показа загрузчика
+        this.loadStartTime = 0;
     }
 
     preload() {
-        // Запоминаем время начала загрузки
-        this.loadingStartTime = Date.now();
-        
-        // Не создаем никаких элементов интерфейса, только загружаем ассеты
+        const { width, height } = this.cameras.main;
+        this.loadStartTime = Date.now();
+
+        // Устанавливаем цвет фона загрузочной сцены
+        this.cameras.main.setBackgroundColor(uiStyles.colors.backgroundMain);
+
+        // Создаем стильный прогресс-бар
+        const progressBarWidth = width * 0.6;
+        const progressBarHeight = 4;
+        const progressBarX = (width - progressBarWidth) / 2;
+        const progressBarY = height * 0.5;
+
+        const progressBar = this.add.graphics();
+        progressBar.fillStyle(uiStyles.colors.primary, 0.2);
+        progressBar.fillRect(
+            progressBarX,
+            progressBarY - progressBarHeight/2,
+            progressBarWidth,
+            progressBarHeight
+        );
+
+        // Текст статуса загрузки
+        const loadingText = this.add.text(
+            width / 2,
+            progressBarY - 30,
+            'Загрузка...',
+            {
+                ...uiStyles.textStyles.headline,
+                fill: uiStyles.colors.textPrimaryOnDark
+            }
+        ).setOrigin(0.5);
+
+        // Текст процента загрузки
+        const percentText = this.add.text(
+            width / 2,
+            progressBarY + 30,
+            '0%',
+            {
+                ...uiStyles.textStyles.caption,
+                fill: uiStyles.colors.textSecondaryOnDark
+            }
+        ).setOrigin(0.5);
+
+        // Обновление прогресс-бара
+        this.load.on('progress', (value) => {
+            progressBar.clear();
+            progressBar.fillStyle(uiStyles.colors.primary, 0.2);
+            progressBar.fillRect(
+                progressBarX,
+                progressBarY - progressBarHeight/2,
+                progressBarWidth,
+                progressBarHeight
+            );
+            progressBar.fillStyle(uiStyles.colors.primary, 1);
+            progressBar.fillRect(
+                progressBarX,
+                progressBarY - progressBarHeight/2,
+                progressBarWidth * value,
+                progressBarHeight
+            );
+            percentText.setText(Math.floor(value * 100) + '%');
+        });
 
         this.load.on('complete', () => {
-            // Помечаем, что ассеты загружены
             this.assetsLoaded = true;
-            
-            // Проверяем, прошло ли минимальное время показа анимации
+            console.log('Assets loaded successfully');
             this.checkLoadingComplete();
         });
 
         // Загружаем все необходимые ассеты
-        this.load.image('mainMenuBackground', 'assets/mainMenu.jpg');
-        this.load.image('shopBackground', 'assets/ShopBackground.jpg');
-        this.load.image('blueberry', 'assets/blueberry.png');
-        this.load.image('strawberry', 'assets/strawberry.png');
-        this.load.image('cranberry', 'assets/cranberry.png');
-        this.load.image('background', 'assets/background.png');
-        // Добавляем предварительную загрузку других критических ассетов
-    }
-
-    create() {
-        // Дополнительная проверка завершения загрузки, если вдруг её не проверили ранее
-        if (this.assetsLoaded) {
-            this.checkLoadingComplete();
+        this.load.image('menu_background', 'assets/mainMenu.jpg');
+        this.load.image('shop_background', 'assets/ShopBackground.jpg');
+        this.load.image('game_background', 'assets/background.png');
+        
+        // Загружаем ягоды и другие игровые ассеты
+        const berryAssets = ['cranberry', 'blueberry', 'renderBerry', 'strawberry', 'kashvi', 'littleBrother'];
+        berryAssets.forEach(asset => {
+            this.load.image(asset, `assets/${asset}.png`);
+        });
+        
+        // Загружаем бомбу и эффекты взрыва
+        this.load.image('bomb', 'assets/bomb.png');
+        this.load.image('explosion', 'assets/explosion.png');
+        
+        // Загружаем эффекты клякс
+        for (let i = 1; i <= 4; i++) {
+            this.load.image(`mark${i}`, `assets/marks/Mark (${i}).png`);
         }
     }
-    
-    /**
-     * Проверяет, прошло ли минимальное время показа анимации загрузки
-     * Если время не прошло, то устанавливает таймер для перехода в меню
-     */
+
     checkLoadingComplete() {
-        const currentTime = Date.now();
-        const elapsedTime = currentTime - this.loadingStartTime;
-        
-        // Если минимальное время не истекло, устанавливаем таймер
-        if (elapsedTime < this.minLoadingTime) {
-            const remainingTime = this.minLoadingTime - elapsedTime;
-            this.time.delayedCall(remainingTime, () => {
-                this.finishLoading();
-            });
+        const elapsedTime = Date.now() - this.loadStartTime;
+        const remainingTime = Math.max(0, this.minLoadingTime - elapsedTime);
+
+        console.log(`Loading time: ${elapsedTime}ms, remaining time: ${remainingTime}ms`);
+
+        if (remainingTime > 0) {
+            this.time.delayedCall(remainingTime, this.finishLoading, [], this);
         } else {
-            // Если минимальное время уже прошло, сразу переходим в меню
             this.finishLoading();
         }
     }
-    
-    /**
-     * Завершение загрузки и переход в меню
-     */
+
     finishLoading() {
-        // Переходим в меню
-        this.scene.start('MenuScene');
+        console.log('Finishing loading, transitioning to MenuScene');
+        
+        // Плавное затухание элементов загрузки
+        const elements = this.children.list.filter(child => 
+            child instanceof Phaser.GameObjects.Text || 
+            child instanceof Phaser.GameObjects.Graphics
+        );
+
+        this.tweens.add({
+            targets: elements,
+            alpha: 0,
+            duration: 300,
+            ease: 'Power2',
+            onComplete: () => {
+                // Уведомляем игру о завершении загрузки
+                this.game.events.emit('bootcomplete');
+                
+                // Принудительно запускаем MenuScene после небольшой задержки
+                this.time.delayedCall(100, () => {
+                    console.log('Starting MenuScene');
+                    this.scene.start('MenuScene');
+                }, [], this);
+            }
+        });
     }
 }
