@@ -29,7 +29,7 @@ export default class ShopScene extends Phaser.Scene {
             .setDepth(-1);
 
         // 2. Заголовок
-        this.add.text(width / 2, height * 0.1, 'МАГАЗИН', {
+        this.add.text(width / 2, height * 0.1, 'SHOP', {
             fontFamily: '"Impact", fantasy',
             fontSize: '48px',
             fill: '#FFFFFF',
@@ -45,7 +45,7 @@ export default class ShopScene extends Phaser.Scene {
         const coinText = this.add.text(
             width / 2,
             height * 0.2,
-            `Очки: ${this.coins}`,
+            `Points: ${this.coins}`,
             {
                 fontFamily: '"Impact", fantasy',
                 fontSize: '36px',
@@ -70,15 +70,16 @@ export default class ShopScene extends Phaser.Scene {
         const shopSkins = ['kashvi', 'littleBrother', 'cranberry'];
         const prices = [500, 250, 100]; // Цены для каждого скина
         
-        // Расположение скинов в ряд
+        // Расположение скинов в ряд по центру экрана
         const itemWidth = width * 0.25;
-        const spacing = width * 0.1;
-        const startX = width / 2 - (itemWidth + spacing);
+        const spacing = width * 0.05;
+        const totalWidth = (itemWidth * 3) + (spacing * 2);
+        const startX = (width - totalWidth) / 2 + itemWidth / 2;
         const itemY = height * 0.5;
         
         // Создаем карточки для каждого скина
         shopSkins.forEach((skinKey, index) => {
-            const x = startX + index * (itemWidth + spacing / 2);
+            const x = startX + index * (itemWidth + spacing);
             this.createSkinCard(x, itemY, skinKey, prices[index]);
         });
     }
@@ -108,7 +109,7 @@ export default class ShopScene extends Phaser.Scene {
         }).setOrigin(0.5);
         
         // Добавляем цену
-        this.add.text(x, y + cardHeight/4 + 10, `${price} очков`, {
+        this.add.text(x, y + cardHeight/4 + 10, `${price} points`, {
             fontFamily: '"Impact", fantasy',
             fontSize: '20px',
             fill: '#000000',
@@ -122,7 +123,7 @@ export default class ShopScene extends Phaser.Scene {
         button.fillStyle(0x000000, 1);
         button.fillRoundedRect(x - buttonWidth/2, y + cardHeight/4 + 40 - buttonHeight/2, buttonWidth, buttonHeight, 8);
         
-        const buttonText = this.add.text(x, y + cardHeight/4 + 40, 'КУПИТЬ', {
+        const buttonText = this.add.text(x, y + cardHeight/4 + 40, 'BUY', {
             fontFamily: '"Impact", fantasy',
             fontSize: '20px',
             fill: '#FFFFFF',
@@ -173,13 +174,13 @@ export default class ShopScene extends Phaser.Scene {
             saveManager.save(saveData);
             
             // Показываем сообщение об успешной покупке
-            this.showMessage('Скин разблокирован!', 0x00FF00);
+            this.showMessage('Skin unlocked!', 0x00FF00);
             
             // Обновляем отображение очков
             this.scene.restart();
         } else {
             // Показываем сообщение о недостаточном количестве очков
-            this.showMessage('Недостаточно очков!', 0xFF0000);
+            this.showMessage('Not enough points!', 0xFF0000);
         }
     }
     
@@ -226,31 +227,33 @@ export default class ShopScene extends Phaser.Scene {
         // Создаем кнопку "Назад"
         const buttonWidth = width * 0.3;
         const buttonHeight = 60;
+        const buttonContainer = this.add.container(width / 2, height * 0.85);
+        
+        // Создаем белую кнопку с черной границей
         const button = this.add.graphics();
         button.fillStyle(0xFFFFFF, 1);
-        button.fillRoundedRect(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight, 10);
+        button.fillRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
         button.lineStyle(4, 0x000000, 1);
-        button.strokeRoundedRect(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight, 10);
+        button.strokeRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
         
         // Добавляем текст
-        const buttonText = this.add.text(width / 2, height * 0.85, 'НАЗАД', {
+        const buttonText = this.add.text(0, 0, 'BACK', {
             fontFamily: '"Impact", fantasy',
             fontSize: '30px',
             fill: '#000000',
             align: 'center'
         }).setOrigin(0.5);
         
-        // Делаем кнопку интерактивной
-        const hitArea = new Phaser.Geom.Rectangle(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight);
-        const hitAreaCallback = Phaser.Geom.Rectangle.Contains;
+        // Добавляем все элементы в контейнер
+        buttonContainer.add([button, buttonText]);
         
-        this.add.zone(width / 2, height * 0.85, buttonWidth, buttonHeight)
-            .setOrigin(0.5)
-            .setInteractive({ hitArea, hitAreaCallback })
+        // Делаем контейнер интерактивным
+        buttonContainer.setSize(buttonWidth, buttonHeight);
+        buttonContainer.setInteractive({ cursor: 'pointer' })
             .on('pointerdown', () => {
                 // Эффект нажатия
                 this.tweens.add({
-                    targets: [buttonText, button],
+                    targets: buttonContainer,
                     scaleX: 0.95,
                     scaleY: 0.95,
                     duration: 100,

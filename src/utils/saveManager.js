@@ -13,7 +13,8 @@ export const saveManager = {
         return {
             selectedSkin: 'default',
             unlockedSkins: ['default'],
-            highScore: 0
+            highScore: 0,
+            bladeColor: 0xFFFFFF
         };
     },
 
@@ -38,5 +39,17 @@ export const saveManager = {
             this.save(data);
         }
         return data.highScore;
+    },
+    
+    setBladeColor(color) {
+        const data = this.load();
+        data.bladeColor = color;
+        this.save(data);
+        return color;
+    },
+    
+    getBladeColor() {
+        const data = this.load();
+        return data.bladeColor || 0xFFFFFF;
     }
 }; 

@@ -25,7 +25,7 @@ export default class SettingsScene extends Phaser.Scene {
             .setDepth(-1);
 
         // 2. Заголовок
-        this.add.text(width / 2, height * 0.1, 'НАСТРОЙКИ', {
+        this.add.text(width / 2, height * 0.1, 'SETTINGS', {
             fontFamily: '"Impact", fantasy',
             fontSize: '48px',
             fill: '#FFFFFF',
@@ -35,7 +35,7 @@ export default class SettingsScene extends Phaser.Scene {
         }).setOrigin(0.5);
 
         // 3. Подзаголовок для выбора цвета лезвия
-        this.add.text(width / 2, height * 0.25, 'Выберите цвет лезвия', {
+        this.add.text(width / 2, height * 0.25, 'Choose blade color', {
             fontFamily: '"Impact", fantasy',
             fontSize: '30px',
             fill: '#FFFFFF',
@@ -56,6 +56,17 @@ export default class SettingsScene extends Phaser.Scene {
 
         // 7. Кнопка "Назад"
         this.createBackButton(width, height);
+
+        // 8. Отладочная информация
+        this.debugText = this.add.text(width / 2, height * 0.7, '', {
+            fontFamily: '"Arial", sans-serif',
+            fontSize: '16px',
+            fill: '#FFFFFF',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5);
+
+        this.updateDebugInfo();
     }
 
     createColorPalette(width, height) {
@@ -66,7 +77,7 @@ export default class SettingsScene extends Phaser.Scene {
             0x00FF00, // Зеленый
             0x0000FF, // Синий
             0xFFFF00, // Желтый
-            0xFF00FF, // Фиолетовый
+            0xFF00FF, // Пурпурный
             0x00FFFF, // Голубой
             0xFF8000, // Оранжевый
             0x8000FF  // Фиолетовый
@@ -117,7 +128,7 @@ export default class SettingsScene extends Phaser.Scene {
             .setStrokeStyle(2, 0xFFFFFF);
         
         // Заголовок предпросмотра
-        this.add.text(width / 2, previewY - previewHeight / 2 - 20, 'Предпросмотр', {
+        this.add.text(width / 2, previewY - previewHeight / 2 - 20, 'Preview', {
             fontFamily: '"Impact", fantasy',
             fontSize: '24px',
             fill: '#FFFFFF',
@@ -131,14 +142,21 @@ export default class SettingsScene extends Phaser.Scene {
     }
 
     selectColor(color) {
+        // Сохраняем выбранный цвет
         this.selectedColor = color;
         
-        // Сохраняем выбранный цвет
-        const saveData = saveManager.load();
+        // Получаем текущее сохранение
+        let saveData = saveManager.load();
+        
+        // Обновляем цвет лезвия
         saveData.bladeColor = color;
+        
+        // Сохраняем изменения
         saveManager.save(saveData);
         
-        // Обновляем интерфейс
+        // Обновляем интерфейс и отладочную информацию
+        this.updatePreview();
+        this.updateDebugInfo();
         this.scene.restart();
     }
 
@@ -158,35 +176,45 @@ export default class SettingsScene extends Phaser.Scene {
         this.previewGraphics.strokePath();
     }
 
+    updateDebugInfo() {
+        // Получаем данные из сохранения
+        const saveData = saveManager.load();
+        
+        // Отображаем информацию о сохранении
+        this.debugText.setText(`Current color: 0x${this.selectedColor.toString(16).toUpperCase()}`);
+    }
+
     createBackButton(width, height) {
         // Создаем кнопку "Назад"
         const buttonWidth = width * 0.3;
         const buttonHeight = 60;
+        const buttonContainer = this.add.container(width / 2, height * 0.85);
+        
+        // Создаем белую кнопку с черной границей
         const button = this.add.graphics();
         button.fillStyle(0xFFFFFF, 1);
-        button.fillRoundedRect(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight, 10);
+        button.fillRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
         button.lineStyle(4, 0x000000, 1);
-        button.strokeRoundedRect(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight, 10);
+        button.strokeRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
         
         // Добавляем текст
-        const buttonText = this.add.text(width / 2, height * 0.85, 'НАЗАД', {
+        const buttonText = this.add.text(0, 0, 'BACK', {
             fontFamily: '"Impact", fantasy',
             fontSize: '30px',
             fill: '#000000',
             align: 'center'
         }).setOrigin(0.5);
         
-        // Делаем кнопку интерактивной
-        const hitArea = new Phaser.Geom.Rectangle(width / 2 - buttonWidth / 2, height * 0.85 - buttonHeight / 2, buttonWidth, buttonHeight);
-        const hitAreaCallback = Phaser.Geom.Rectangle.Contains;
+        // Добавляем все элементы в контейнер
+        buttonContainer.add([button, buttonText]);
         
-        this.add.zone(width / 2, height * 0.85, buttonWidth, buttonHeight)
-            .setOrigin(0.5)
-            .setInteractive({ hitArea, hitAreaCallback })
+        // Делаем контейнер интерактивным
+        buttonContainer.setSize(buttonWidth, buttonHeight);
+        buttonContainer.setInteractive({ cursor: 'pointer' })
             .on('pointerdown', () => {
                 // Эффект нажатия
                 this.tweens.add({
-                    targets: [buttonText, button],
+                    targets: buttonContainer,
                     scaleX: 0.95,
                     scaleY: 0.95,
                     duration: 100,
