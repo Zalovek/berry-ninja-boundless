@@ -75,7 +75,6 @@ export class BootScene extends Phaser.Scene {
 
         this.load.on('complete', () => {
             this.assetsLoaded = true;
-            console.log('Assets loaded successfully');
             this.checkLoadingComplete();
         });
 
@@ -85,7 +84,7 @@ export class BootScene extends Phaser.Scene {
         this.load.image('game_background', 'assets/background.png');
         
         // Загружаем ягоды и другие игровые ассеты
-        const berryAssets = ['cranberry', 'blueberry', 'renderBerry', 'strawberry', 'kashvi', 'littleBrother'];
+        const berryAssets = ['cranberry', 'blueberry', 'renderBerry', 'strawberry', 'kashvi', 'littleBrother', 'reka'];
         berryAssets.forEach(asset => {
             this.load.image(asset, `assets/${asset}.png`);
         });
@@ -104,8 +103,6 @@ export class BootScene extends Phaser.Scene {
         const elapsedTime = Date.now() - this.loadStartTime;
         const remainingTime = Math.max(0, this.minLoadingTime - elapsedTime);
 
-        console.log(`Loading time: ${elapsedTime}ms, remaining time: ${remainingTime}ms`);
-
         if (remainingTime > 0) {
             this.time.delayedCall(remainingTime, this.finishLoading, [], this);
         } else {
@@ -114,8 +111,6 @@ export class BootScene extends Phaser.Scene {
     }
 
     finishLoading() {
-        console.log('Finishing loading, transitioning to MenuScene');
-        
         // Плавное затухание элементов загрузки
         const elements = this.children.list.filter(child => 
             child instanceof Phaser.GameObjects.Text || 
@@ -131,9 +126,13 @@ export class BootScene extends Phaser.Scene {
                 // Уведомляем игру о завершении загрузки
                 this.game.events.emit('bootcomplete');
                 
-                // Принудительно запускаем MenuScene после небольшой задержки
+                // Make sure MenuScene is not running already
+                if (this.scene.isActive('MenuScene')) {
+                    this.scene.stop('MenuScene');
+                }
+                
+                // Start MenuScene after a small delay
                 this.time.delayedCall(100, () => {
-                    console.log('Starting MenuScene');
                     this.scene.start('MenuScene');
                 }, [], this);
             }

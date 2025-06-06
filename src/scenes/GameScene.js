@@ -24,6 +24,38 @@ export class GameScene extends Phaser.Scene {
         this.comboText = null; // Combo text
         this.waveIndex = 0; // Current wave index
         this.isWaveActive = false; // Active wave flag
+        
+        // Initialize groups in constructor to avoid undefined errors
+        this.berriesGroup = null;
+        this.bombsGroup = null;
+        this.splashGroup = null;
+    }
+
+    init(data) {
+        // Initialize/reset variables when scene starts
+        this.score = 0;
+        this.lives = 3;
+        this.gameOver = false;
+        this.comboCount = 0;
+        this.waveIndex = 0;
+        this.isWaveActive = false;
+        this.trailPoints = [];
+        
+        // Reset any existing groups (in case they weren't properly destroyed)
+        if (this.berriesGroup) {
+            this.berriesGroup.destroy(true);
+        }
+        if (this.bombsGroup) {
+            this.bombsGroup.destroy(true);
+        }
+        if (this.splashGroup) {
+            this.splashGroup.destroy(true);
+        }
+        
+        // Create empty groups
+        this.berriesGroup = this.add.group();
+        this.bombsGroup = this.add.group();
+        this.splashGroup = this.add.group();
     }
 
     preload() {
@@ -56,31 +88,32 @@ export class GameScene extends Phaser.Scene {
             .setDepth(-2);
 
         // 2. Create blade graphics
+        if (this.bladeGraphics) {
+            this.bladeGraphics.clear();
+        }
         this.bladeGraphics = this.add.graphics();
         
-        // Load blade color from settings
-        const saveData = saveManager.load();
-        this.bladeColor = saveData.bladeColor || 0xFFFFFF;
+        // Load blade color from settings using the dedicated method
+        this.bladeColor = saveManager.getBladeColor();
         
         // 3. Initialize trail points array
         this.trailPoints = [];
         this.lastMoveTime = this.time.now;
         
-        // 4. Create groups for game objects
-        this.berriesGroup = this.add.group();
-        this.bombsGroup = this.add.group();
-        this.splashGroup = this.add.group();
-        
         // 5. Display score and lives
         this.createScoreAndLives();
         
-        // 6. Event handlers
+        // 6. Event handlers - first remove any existing handlers to avoid duplicates
+        this.input.off('pointermove', this.handlePointerMove, this);
         this.input.on('pointermove', this.handlePointerMove, this);
-        
+
         // 7. Start wave system
         this.startWaveSystem();
         
-        // 8. Create bomb timer
+        // 8. Create bomb timer - remove existing if any
+        if (this.bombTimer) {
+            this.bombTimer.remove();
+        }
         this.bombTimer = this.time.addEvent({
             delay: 3000,
             callback: this.spawnBomb,
@@ -91,8 +124,8 @@ export class GameScene extends Phaser.Scene {
         // 9. Back button
         this.createBackButton();
         
-        // 10. Create combo text
-        this.comboText = this.add.text(width / 2, height / 2, '', {
+        // 10. Create combo text at the top of the screen (moved lower)
+        this.comboText = this.add.text(width / 2, 120, '', {
             fontFamily: '"Impact", fantasy',
             fontSize: '48px',
             fill: '#FFFF00',
@@ -100,6 +133,42 @@ export class GameScene extends Phaser.Scene {
             strokeThickness: 6,
             align: 'center'
         }).setOrigin(0.5).setAlpha(0).setDepth(100);
+    }
+    
+    // This is called when the scene is shutdown (e.g., when switching to another scene)
+    shutdown() {
+        // Remove event listeners
+        this.input.off('pointermove', this.handlePointerMove, this);
+        
+        // Stop all timers
+        this.time.removeAllEvents();
+        
+        // Clear all tweens
+        this.tweens.killAll();
+        
+        // Make sure blade graphics are cleared
+        if (this.bladeGraphics) {
+            this.bladeGraphics.clear();
+        }
+        
+        // Explicitly destroy all groups
+        if (this.berriesGroup) {
+            this.berriesGroup.destroy(true);
+            this.berriesGroup = null;
+        }
+        
+        if (this.bombsGroup) {
+            this.bombsGroup.destroy(true);
+            this.bombsGroup = null;
+        }
+        
+        if (this.splashGroup) {
+            this.splashGroup.destroy(true);
+            this.splashGroup = null;
+        }
+        
+        // Reset trail points
+        this.trailPoints = [];
     }
     
     startWaveSystem() {
@@ -110,8 +179,10 @@ export class GameScene extends Phaser.Scene {
             { count: 10, interval: 300, delay: 4000 }
         ];
         
-        // Start first wave
-        this.startWave();
+        // Start first wave immediately
+        this.time.delayedCall(500, () => {
+            this.startWave();
+        });
     }
     
     startWave() {
@@ -147,7 +218,7 @@ export class GameScene extends Phaser.Scene {
                 }
             },
             callbackScope: this,
-            loop: true
+            repeat: currentWave.count - 1
         });
     }
     
@@ -260,7 +331,7 @@ export class GameScene extends Phaser.Scene {
             this.score += bonusPoints;
             this.scoreText.setText(`Score: ${this.score}`);
             
-            // Display combo text
+            // Display combo text at the top of the screen
             this.comboText.setText(`COMBO x${this.comboCount}!\n+${bonusPoints}`);
             this.comboText.setAlpha(1);
             
@@ -277,6 +348,7 @@ export class GameScene extends Phaser.Scene {
     
     resetCombo() {
         this.comboCount = 0;
+        
         if (this.comboTimer) {
             this.comboTimer.remove();
             this.comboTimer = null;
@@ -324,16 +396,35 @@ export class GameScene extends Phaser.Scene {
         
         const { width, height } = this.cameras.main;
         
+        // Get available berry types from both default and unlocked skins
+        let availableBerryTypes = [...skins.default.assets];
+        
+        // Add unlocked skins to the berry pool
+        const saveData = saveManager.load();
+        if (saveData.unlockedSkins && saveData.unlockedSkins.length > 0) {
+            saveData.unlockedSkins.forEach(skinId => {
+                // Skip default skin as we already included it
+                if (skinId !== 'default' && skins[skinId]) {
+                    availableBerryTypes = availableBerryTypes.concat(skins[skinId].assets);
+                }
+            });
+        }
+        
         // Choose random berry from available ones
-        const berryTypes = skins.default.assets;
-        const berryType = berryTypes[Phaser.Math.Between(0, berryTypes.length - 1)];
+        const berryType = availableBerryTypes[Phaser.Math.Between(0, availableBerryTypes.length - 1)];
         
         // Create berry
         const x = Phaser.Math.Between(100, width - 100);
         const berry = this.add.image(x, height + 50, berryType);
         
-        // Set size depending on type
-        const scale = Phaser.Math.FloatBetween(0.6, 1.0);
+        // Set size depending on type - reduce special skins size by 50%
+        let scale = Phaser.Math.FloatBetween(0.6, 1.0);
+        
+        // If this is a special skin (not a default berry), make it smaller
+        if (!skins.default.assets.includes(berryType)) {
+            scale *= 0.5; // Reduce size by half for special skins
+        }
+        
         berry.setScale(scale);
         
         // Add physics
@@ -464,13 +555,17 @@ export class GameScene extends Phaser.Scene {
             }
         });
         
-        // Decrease lives
-        this.lives--;
-        this.livesText.setText(`Lives: ${this.lives}`);
-        
-        // Check game over condition
-        if (this.lives <= 0) {
-            this.endGame();
+        // Only decrease lives if the game is not over and we have lives left
+        if (!this.gameOver && this.lives > 0) {
+            this.lives--;
+            this.livesText.setText(`Lives: ${this.lives}`);
+            
+            // Check game over condition
+            if (this.lives <= 0) {
+                this.lives = 0; // Ensure lives don't go negative
+                this.livesText.setText(`Lives: ${this.lives}`);
+                this.endGame();
+            }
         }
         
         // Destroy bomb
@@ -487,10 +582,13 @@ export class GameScene extends Phaser.Scene {
         // Remove objects that are off-screen
         this.cleanupObjects();
     }
-    
+
     drawBladeTrail() {
         // Clear previous trail
         this.bladeGraphics.clear();
+        
+        // Make sure we have the latest blade color from settings using the dedicated method
+        this.bladeColor = saveManager.getBladeColor();
         
         // Check if too much time has passed since last movement
         const timeSinceLastMove = this.time.now - this.lastMoveTime;
@@ -557,7 +655,7 @@ export class GameScene extends Phaser.Scene {
                 this.bladeGraphics.lineTo(tipX2, tipY2);
                 this.bladeGraphics.lineTo(tipX1, tipY1);
                 this.bladeGraphics.lineTo(tipX3, tipY3);
-                this.bladeGraphics.closePath();
+            this.bladeGraphics.closePath();
                 this.bladeGraphics.fillPath();
             }
         }
@@ -590,12 +688,15 @@ export class GameScene extends Phaser.Scene {
         if (this.bombTimer) this.bombTimer.remove();
         if (this.comboTimer) this.comboTimer.remove();
         
-        // Save best score
+        // Save best score and update coins for shop
         const saveData = saveManager.load();
         if (this.score > (saveData.highScore || 0)) {
             saveData.highScore = this.score;
-            saveManager.save(saveData);
         }
+        
+        // Add game score to coins for shop
+        saveData.coins = (saveData.coins || 0) + this.score;
+        saveManager.save(saveData);
         
         // Display game over screen
         const { width, height } = this.cameras.main;
@@ -611,7 +712,7 @@ export class GameScene extends Phaser.Scene {
             stroke: '#FF0000',
             strokeThickness: 6
         }).setOrigin(0.5);
-        
+
         // Final score
         this.add.text(width / 2, height / 2, `Score: ${this.score}`, {
             fontFamily: '"Impact", fantasy',
@@ -620,7 +721,7 @@ export class GameScene extends Phaser.Scene {
             stroke: '#000000',
             strokeThickness: 5
         }).setOrigin(0.5);
-        
+
         // "Play Again" button
         const restartButton = this.add.text(width / 2, height * 2/3, 'PLAY AGAIN', {
             fontFamily: '"Impact", fantasy',
@@ -631,8 +732,7 @@ export class GameScene extends Phaser.Scene {
         }).setOrigin(0.5)
         .setInteractive()
         .on('pointerdown', () => {
-            // Reset game over flag before restart
-            this.gameOver = false;
+            // Reset the scene - this will call init() and create() which resets all game state
             this.scene.restart();
         });
         

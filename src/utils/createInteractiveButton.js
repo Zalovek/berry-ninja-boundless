@@ -175,7 +175,6 @@ export function createInteractiveButton(scene, x, y, text, onClick, styleOptions
 
     container.on('pointerdown', () => {
         if (!container.input.enabled) return;
-        console.log('Button pressed:', text);
         isPointerDown = true;
         
         scene.tweens.killTweensOf(buttonBackground);
@@ -197,7 +196,6 @@ export function createInteractiveButton(scene, x, y, text, onClick, styleOptions
 
     container.on('pointerup', (pointer) => {
         if (!container.input.enabled) return;
-        console.log('Button released:', text);
         
         const wasPressed = isPointerDown;
         isPointerDown = false;
@@ -205,8 +203,6 @@ export function createInteractiveButton(scene, x, y, text, onClick, styleOptions
         // Проверяем, находится ли указатель над кнопкой
         const localPoint = container.getLocalPoint(pointer.worldX, pointer.worldY);
         const isOver = container.input.hitArea.contains(localPoint.x, localPoint.y);
-
-        console.log('Button state:', { wasPressed, isOver });
 
         scene.tweens.killTweensOf(container);
         scene.tweens.add({
@@ -218,7 +214,6 @@ export function createInteractiveButton(scene, x, y, text, onClick, styleOptions
         });
 
         if (wasPressed && isOver) {
-            console.log('Button clicked:', text);
             scene.tweens.killTweensOf(buttonBackground);
             currentColor = Phaser.Display.Color.ValueToColor(finalStyle.hoverBackgroundColor);
             drawBackground(
@@ -226,7 +221,6 @@ export function createInteractiveButton(scene, x, y, text, onClick, styleOptions
                 finalStyle.hoverBackgroundAlpha || finalStyle.backgroundAlpha || 1
             );
             if (onClick) {
-                console.log('Calling onClick for:', text);
                 onClick();
             }
         } else {

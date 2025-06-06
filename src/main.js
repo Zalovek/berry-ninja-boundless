@@ -26,29 +26,42 @@ const config = {
     scale: {
         mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH
+    },
+    // Add scene transition configuration
+    sceneConfig: {
+        // Use clean shutdown and initialization for scene transitions
+        transitionOut: function(targetScene, duration) {
+            this.cameras.main.fadeOut(duration);
+        },
+        transitionIn: function(targetScene, duration) {
+            this.cameras.main.fadeIn(duration);
+        }
     }
 };
 
-// Создаем игру, но не инициализируем её сразу
+// Create game instance
 let game = null;
 
-// Функция для запуска игры
+// Function to start game
 function startGame() {
-    console.log('Starting game...');
-    
-    // Создаем экземпляр игры
+    // Create game instance
     game = new Phaser.Game(config);
-    
-    // Добавляем обработчик для отслеживания состояния загрузки
+
+    // Add global event listener for boot complete
     game.events.on('bootcomplete', () => {
-        console.log('BootScene complete, transitioning to MenuScene');
+        // Game boot complete
+    });
+    
+    // Add error handler for the game
+    window.addEventListener('error', function(event) {
+        console.error('Game error:', event.error);
     });
 }
 
-// Делаем функцию запуска игры глобальной
+// Make start function globally available
 window.startGame = startGame;
-
-// Обработчик изменения размера окна
+        
+// Resize handler
 window.addEventListener('resize', () => {
     if (game) {
         game.scale.resize(window.innerWidth, window.innerHeight);

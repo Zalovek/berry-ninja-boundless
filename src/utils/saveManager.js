@@ -42,14 +42,43 @@ export const saveManager = {
     },
     
     setBladeColor(color) {
+        // Make sure color is a number
+        if (typeof color === 'string') {
+            color = parseInt(color, 16);
+        }
+        
+        // Ensure we have a valid color
+        if (isNaN(color) || color < 0) {
+            color = 0xFFFFFF; // Default to white if invalid
+        }
+        
         const data = this.load();
         data.bladeColor = color;
+        
+        // Log to confirm color is being saved correctly
+        console.log("Saving blade color:", color, "typeof:", typeof color);
+        
         this.save(data);
         return color;
     },
     
     getBladeColor() {
         const data = this.load();
-        return data.bladeColor || 0xFFFFFF;
+        let color = data.bladeColor;
+        
+        // Make sure color is a number
+        if (typeof color === 'string') {
+            color = parseInt(color, 16);
+        }
+        
+        // Ensure we have a valid color
+        if (isNaN(color) || color < 0) {
+            color = 0xFFFFFF; // Default to white if invalid
+        }
+        
+        // Log to confirm color is being loaded correctly
+        console.log("Loading blade color:", color, "typeof:", typeof color);
+        
+        return color;
     }
 }; 

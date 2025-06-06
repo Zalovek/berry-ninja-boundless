@@ -5,7 +5,9 @@ import { saveManager } from '../utils/saveManager';
 export default class SettingsScene extends Phaser.Scene {
     constructor() {
         super({ key: 'SettingsScene' });
-        this.selectedColor = 0xFFFFFF; // Белый цвет по умолчанию
+        this.selectedColor = 0xFFFFFF; // Default white color
+        this.colorButtons = [];
+        this.colorZones = []; // Add array to store interactive zones
     }
 
     preload() {
@@ -15,16 +17,16 @@ export default class SettingsScene extends Phaser.Scene {
     create() {
         const { width, height } = this.cameras.main;
 
-        // 1. Фон
+        // 1. Background
         this.add.image(width / 2, height / 2, 'menu_background')
             .setDisplaySize(width, height)
             .setDepth(-2);
 
-        // Добавляем затемнение для лучшей читаемости
+        // Add darkening overlay for better readability
         const overlay = this.add.rectangle(width / 2, height / 2, width, height, 0x000000, 0.3)
             .setDepth(-1);
 
-        // 2. Заголовок
+        // 2. Title
         this.add.text(width / 2, height * 0.1, 'SETTINGS', {
             fontFamily: '"Impact", fantasy',
             fontSize: '48px',
@@ -34,7 +36,7 @@ export default class SettingsScene extends Phaser.Scene {
             align: 'center'
         }).setOrigin(0.5);
 
-        // 3. Подзаголовок для выбора цвета лезвия
+        // 3. Subtitle for blade color selection
         this.add.text(width / 2, height * 0.25, 'Choose blade color', {
             fontFamily: '"Impact", fantasy',
             fontSize: '30px',
@@ -44,43 +46,41 @@ export default class SettingsScene extends Phaser.Scene {
             align: 'center'
         }).setOrigin(0.5);
 
-        // 4. Загружаем сохраненный цвет
+        // 4. Load saved color
         const saveData = saveManager.load();
         this.selectedColor = saveData.bladeColor || 0xFFFFFF;
 
-        // 5. Создаем палитру цветов
+        // 5. Create color palette
         this.createColorPalette(width, height);
 
-        // 6. Предпросмотр выбранного цвета
+        // 6. Create color preview
         this.createColorPreview(width, height);
 
-        // 7. Кнопка "Назад"
+        // 7. Create back button
         this.createBackButton(width, height);
 
-        // 8. Отладочная информация
-        this.debugText = this.add.text(width / 2, height * 0.7, '', {
+        // Show current color info
+        this.colorInfo = this.add.text(width / 2, height * 0.7, `Current color: 0x${this.selectedColor.toString(16).toUpperCase()}`, {
             fontFamily: '"Arial", sans-serif',
-            fontSize: '16px',
+            fontSize: '18px',
             fill: '#FFFFFF',
             stroke: '#000000',
             strokeThickness: 2
         }).setOrigin(0.5);
-
-        this.updateDebugInfo();
     }
 
     createColorPalette(width, height) {
-        // Массив доступных цветов
+        // Available colors
         const colors = [
-            0xFFFFFF, // Белый
-            0xFF0000, // Красный
-            0x00FF00, // Зеленый
-            0x0000FF, // Синий
-            0xFFFF00, // Желтый
-            0xFF00FF, // Пурпурный
-            0x00FFFF, // Голубой
-            0xFF8000, // Оранжевый
-            0x8000FF  // Фиолетовый
+            0xFFFFFF, // White
+            0xFF0000, // Red
+            0x00FF00, // Green
+            0x0000FF, // Blue
+            0xFFFF00, // Yellow
+            0xFF00FF, // Magenta
+            0x00FFFF, // Cyan
+            0xFF8000, // Orange
+            0x8000FF  // Purple
         ];
 
         const paletteY = height * 0.4;
@@ -89,32 +89,72 @@ export default class SettingsScene extends Phaser.Scene {
         const totalWidth = colors.length * (colorSize + spacing) - spacing;
         let startX = (width - totalWidth) / 2;
 
-        // Создаем цветные кнопки
+        // Clear existing buttons and zones if any
+        if (this.colorButtons && this.colorButtons.length > 0) {
+            this.colorButtons.forEach(button => {
+                if (button) button.destroy();
+            });
+        }
+        this.colorButtons = [];
+        
+        // Clear existing interactive zones
+        if (this.colorZones && this.colorZones.length > 0) {
+            this.colorZones.forEach(zone => {
+                if (zone) zone.destroy();
+            });
+        }
+        this.colorZones = [];
+
+        // Create color buttons
         colors.forEach((color, index) => {
             const x = startX + index * (colorSize + spacing) + colorSize / 2;
+            
+            // Create a simple interactive circle for each color
             const colorButton = this.add.graphics();
             
-            // Рисуем кружок с выбранным цветом
+            // Draw the color circle
             colorButton.fillStyle(color, 1);
             colorButton.fillCircle(x, paletteY, colorSize / 2);
             colorButton.lineStyle(3, 0xFFFFFF, 1);
             colorButton.strokeCircle(x, paletteY, colorSize / 2);
             
-            // Если это выбранный цвет, добавляем индикатор
-            if (color === this.selectedColor) {
-                colorButton.lineStyle(3, 0x000000, 1);
+            // Add selection indicator if this is the selected color
+            // Ensure both are compared as numbers
+            if (Number(color) === Number(this.selectedColor)) {
+                colorButton.lineStyle(4, 0x000000, 1);
                 colorButton.strokeCircle(x, paletteY, colorSize / 2 + 5);
             }
             
-            // Делаем кнопку интерактивной
-            const hitArea = new Phaser.Geom.Circle(x, paletteY, colorSize / 2);
-            const hitAreaCallback = Phaser.Geom.Circle.Contains;
+            // Make it interactive
+            const hitArea = new Phaser.Geom.Circle(0, 0, colorSize / 2);
             
-            this.add.zone(x, paletteY, colorSize, colorSize)
-                .setInteractive({ hitArea, hitAreaCallback })
+            // Create a rectangular zone instead of a circular one for better hit detection
+            const zone = this.add.rectangle(x, paletteY, colorSize, colorSize)
+                .setInteractive()
                 .on('pointerdown', () => {
+                    console.log("Color clicked:", color);
                     this.selectColor(color);
                 });
+                
+            // Add visual feedback on hover
+            zone.on('pointerover', () => {
+                colorButton.lineStyle(4, 0xFFFFFF, 1);
+                colorButton.strokeCircle(x, paletteY, colorSize / 2 + 3);
+            });
+            
+            zone.on('pointerout', () => {
+                colorButton.lineStyle(3, 0xFFFFFF, 1);
+                colorButton.strokeCircle(x, paletteY, colorSize / 2);
+                
+                // Re-add selection indicator if this is the selected color
+                if (Number(color) === Number(this.selectedColor)) {
+                    colorButton.lineStyle(4, 0x000000, 1);
+                    colorButton.strokeCircle(x, paletteY, colorSize / 2 + 5);
+                }
+            });
+            
+            this.colorButtons.push(colorButton);
+            this.colorZones.push(zone); // Store the zone reference
         });
     }
 
@@ -123,11 +163,11 @@ export default class SettingsScene extends Phaser.Scene {
         const previewWidth = width * 0.6;
         const previewHeight = 80;
         
-        // Фон для предпросмотра
+        // Background for preview
         this.add.rectangle(width / 2, previewY, previewWidth, previewHeight, 0x000000, 0.5)
             .setStrokeStyle(2, 0xFFFFFF);
         
-        // Заголовок предпросмотра
+        // Preview title
         this.add.text(width / 2, previewY - previewHeight / 2 - 20, 'Preview', {
             fontFamily: '"Impact", fantasy',
             fontSize: '24px',
@@ -136,28 +176,31 @@ export default class SettingsScene extends Phaser.Scene {
             strokeThickness: 3
         }).setOrigin(0.5);
         
-        // Создаем графику для линии
+        // Create graphics for the line
         this.previewGraphics = this.add.graphics();
         this.updatePreview();
     }
 
     selectColor(color) {
-        // Сохраняем выбранный цвет
+        // Save selected color
         this.selectedColor = color;
         
-        // Получаем текущее сохранение
-        let saveData = saveManager.load();
+        // Make sure color is a number, not a string
+        if (typeof color === 'string') {
+            color = parseInt(color, 16);
+        }
         
-        // Обновляем цвет лезвия
-        saveData.bladeColor = color;
+        // Use the dedicated method for setting blade color
+        saveManager.setBladeColor(color);
         
-        // Сохраняем изменения
-        saveManager.save(saveData);
-        
-        // Обновляем интерфейс и отладочную информацию
+        // Update UI without restarting scene
         this.updatePreview();
-        this.updateDebugInfo();
-        this.scene.restart();
+        this.colorInfo.setText(`Current color: 0x${this.selectedColor.toString(16).toUpperCase()}`);
+        
+        // Update color selection indicators
+        this.createColorPalette(this.cameras.main.width, this.cameras.main.height);
+        
+        console.log("Color selected:", color, "typeof:", typeof color);
     }
 
     updatePreview() {
@@ -165,10 +208,10 @@ export default class SettingsScene extends Phaser.Scene {
         const previewY = height * 0.6;
         const previewWidth = width * 0.6;
         
-        // Очищаем предыдущую линию
+        // Clear previous line
         this.previewGraphics.clear();
         
-        // Рисуем линию выбранного цвета
+        // Draw line with selected color
         this.previewGraphics.lineStyle(6, this.selectedColor, 1);
         this.previewGraphics.beginPath();
         this.previewGraphics.moveTo(width / 2 - previewWidth / 2 + 20, previewY);
@@ -176,28 +219,20 @@ export default class SettingsScene extends Phaser.Scene {
         this.previewGraphics.strokePath();
     }
 
-    updateDebugInfo() {
-        // Получаем данные из сохранения
-        const saveData = saveManager.load();
-        
-        // Отображаем информацию о сохранении
-        this.debugText.setText(`Current color: 0x${this.selectedColor.toString(16).toUpperCase()}`);
-    }
-
     createBackButton(width, height) {
-        // Создаем кнопку "Назад"
+        // Create "Back" button
         const buttonWidth = width * 0.3;
         const buttonHeight = 60;
         const buttonContainer = this.add.container(width / 2, height * 0.85);
         
-        // Создаем белую кнопку с черной границей
+        // Create white button with black border
         const button = this.add.graphics();
         button.fillStyle(0xFFFFFF, 1);
         button.fillRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
         button.lineStyle(4, 0x000000, 1);
         button.strokeRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
         
-        // Добавляем текст
+        // Add text
         const buttonText = this.add.text(0, 0, 'BACK', {
             fontFamily: '"Impact", fantasy',
             fontSize: '30px',
@@ -205,14 +240,14 @@ export default class SettingsScene extends Phaser.Scene {
             align: 'center'
         }).setOrigin(0.5);
         
-        // Добавляем все элементы в контейнер
+        // Add all elements to container
         buttonContainer.add([button, buttonText]);
         
-        // Делаем контейнер интерактивным
+        // Make container interactive
         buttonContainer.setSize(buttonWidth, buttonHeight);
         buttonContainer.setInteractive({ cursor: 'pointer' })
             .on('pointerdown', () => {
-                // Эффект нажатия
+                // Pressing effect
                 this.tweens.add({
                     targets: buttonContainer,
                     scaleX: 0.95,

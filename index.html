@@ -79,7 +79,7 @@
             
             // Пытаемся запустить видео
             video.play().catch(function(error) {
-                console.error('Автовоспроизведение видео не сработало:', error);
+                // Silent error handling for autoplay restrictions
             });
             
             // После окончания видео сразу запускаем игру
