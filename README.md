@@ -9,7 +9,7 @@ A fun browser game inspired by Fruit Ninja, set in the Boundless project ecosyst
 You can play the game in two ways:
 
 ### Option 1: Play Online
-Visit [the live demo](https://yourusername.github.io/berry-ninja-boundless) to play right away in your browser.
+Visit [the live demo](https://zalovek.github.io/berry-ninja-boundless/) to play right away in your browser.
 
 ### Option 2: Run Locally
 
@@ -61,7 +61,7 @@ The built files will be in the `dist` directory, which you can deploy to any sta
 
 ## 🔄 About Boundless
 
-[Boundless](https://boundless.xyz) is a project focused on verifiable compute and blockchain technologies. The berry tokens in this game are inspired by Boundless' ecosystem assets.
+[Boundless](https://beboundless.xyz/) is a project focused on verifiable compute and blockchain technologies. The berry tokens in this game are inspired by Boundless' ecosystem assets.
 
 ## 🛠️ Technology Stack
 
